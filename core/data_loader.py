@@ -119,8 +119,18 @@ class BybitDataLoader:
         end_ts = int(end_dt.timestamp() * 1000)
 
         # Formatar símbolo para Bybit perpétuos
+        # Bybit usa formato BTC/USDT:USDT para linear perpetuals
         if ':' not in symbol:
-            formatted_symbol = f"{symbol}:USDT"
+            # Converter BTCUSDT para BTC/USDT:USDT
+            if 'USDT' in symbol:
+                base = symbol.replace('USDT', '')
+                formatted_symbol = f"{base}/USDT:USDT"
+            elif 'USD' in symbol:
+                base = symbol.replace('USD', '')
+                formatted_symbol = f"{base}/USD:USD"
+            else:
+                # Fallback: assumir que já está no formato correto
+                formatted_symbol = symbol
         else:
             formatted_symbol = symbol
 
