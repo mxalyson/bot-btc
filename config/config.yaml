@@ -1,0 +1,179 @@
+# Configuração do Pipeline de ML para Scalping na Bybit
+
+# === DADOS ===
+data:
+  # Símbolos para treinar (contratos perpétuos)
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - SUIUSDT
+
+  # Timeframes para análise
+  timeframes:
+    - 1m
+    - 5m
+
+  # Período de dados históricos (em dias)
+  lookback_days: 180
+
+  # Diretórios
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+
+  # Exchange
+  exchange: "bybit"
+  market_type: "linear"  # futuros perpétuos
+
+# === BYBIT API ===
+bybit:
+  # Deixe vazio se não precisar de autenticação para dados públicos
+  api_key: ""
+  api_secret: ""
+  testnet: false
+
+# === FEATURE ENGINEERING ===
+features:
+  # Médias móveis
+  ema_periods:
+    - 9
+    - 21
+    - 50
+    - 200
+
+  # Indicadores técnicos
+  rsi_period: 14
+  stoch_period: 14
+  stoch_smooth: 3
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+
+  # Bollinger Bands
+  bb_period: 20
+  bb_std: 2
+
+  # ATR para volatilidade
+  atr_period: 14
+
+  # Volume
+  volume_ma_period: 20
+
+  # Normalização de preço
+  price_normalization: "log_returns"  # ou "percent_change"
+  lookback_normalization: 20
+
+# === LABELING ===
+labeling:
+  # Método de labeling: "fixed_horizon" ou "triple_barrier"
+  method: "triple_barrier"
+
+  # Janela futura para análise (número de candles)
+  forward_window: 10
+
+  # Alvos em múltiplos de ATR
+  profit_target_atr: 1.5  # Take profit em 1.5x ATR
+  stop_loss_atr: 1.0      # Stop loss em 1.0x ATR
+
+  # Mínimo de movimento para considerar sinal válido (em % ou ATR)
+  min_move_atr: 0.3
+
+  # Balanceamento - se true, vai criar labels balanceadas
+  balance_classes: true
+
+  # Classes de saída
+  classes:
+    - LONG
+    - SHORT
+    - NONE
+
+# === PREPARAÇÃO DE DATASET ===
+dataset:
+  # Divisão temporal (sem embaralhamento)
+  train_split: 0.70
+  val_split: 0.15
+  test_split: 0.15
+
+  # Remover linhas com NaN
+  drop_na: true
+
+  # Features a excluir (colunas que não devem ser usadas no treino)
+  exclude_features:
+    - timestamp
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - target_class
+    - target_return
+
+# === MODELO ===
+model:
+  # Tipo: "xgboost", "lightgbm", "random_forest"
+  type: "xgboost"
+
+  # Hiperparâmetros do XGBoost
+  xgboost:
+    objective: "multi:softprob"
+    num_class: 3
+    max_depth: 6
+    learning_rate: 0.05
+    n_estimators: 300
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 3
+    gamma: 0.1
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    random_state: 42
+    n_jobs: -1
+    tree_method: "hist"
+
+  # Hiperparâmetros do LightGBM (alternativa)
+  lightgbm:
+    objective: "multiclass"
+    num_class: 3
+    max_depth: 6
+    learning_rate: 0.05
+    n_estimators: 300
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 3
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    random_state: 42
+    n_jobs: -1
+
+  # Diretório de saída
+  output_dir: "models"
+
+  # Early stopping
+  early_stopping_rounds: 50
+
+  # Balanceamento de classes
+  class_weight: "balanced"  # ou null
+
+# === TREINAMENTO ===
+training:
+  # Normalização de features
+  normalize_features: true
+  scaler_type: "standard"  # "standard", "minmax", "robust"
+
+  # Validação
+  use_validation: true
+
+  # Métricas para monitorar
+  metrics:
+    - accuracy
+    - f1_macro
+    - precision_macro
+    - recall_macro
+
+  # Verbose
+  verbose: true
+
+# === LOGGING ===
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "training.log"
+  log_dir: "logs"
