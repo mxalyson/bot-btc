@@ -140,8 +140,13 @@ class ModelTrainer:
         if 'target_class' not in df.columns:
             raise ValueError("Coluna 'target_class' não encontrada")
 
-        # Filtrar pelos mesmos índices de X
-        y = df.loc[indices, 'target_class']
+        # Garantir alinhamento exato com índices de X
+        # Reindex garante mesma ordem e quantidade de amostras
+        y = df.reindex(indices)['target_class']
+
+        # Verificar se há NaNs (índices que não existem no df)
+        if y.isna().any():
+            raise ValueError(f"Alguns índices de X não foram encontrados no DataFrame de labels")
 
         # Codificar labels
         y_encoded = y.map(self.label_mapping)
