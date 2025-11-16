@@ -113,7 +113,7 @@ model:
 
   # XGBoost OTIMIZADO para classificação binária de scalping
   xgboost:
-    # Binário (será ajustado automaticamente no script)
+    # Binário - NÃO usar num_class para binary:logistic!
     objective: "binary:logistic"
 
     # Hiperparâmetros otimizados para reduzir overfitting

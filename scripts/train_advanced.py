@@ -54,9 +54,13 @@ class AdvancedTrainer:
         self.trainer.label_mapping = {'LONG': 0, 'SHORT': 1}
         self.trainer.inverse_label_mapping = {0: 'LONG', 1: 'SHORT'}
 
-        # Atualizar config do modelo para 2 classes
-        self.config['model']['xgboost']['num_class'] = 2
+        # Atualizar config do modelo para classificação binária
+        # IMPORTANTE: binary:logistic NÃO usa num_class!
         self.config['model']['xgboost']['objective'] = 'binary:logistic'
+
+        # Remover num_class se existir (binário não usa)
+        if 'num_class' in self.config['model']['xgboost']:
+            del self.config['model']['xgboost']['num_class']
 
         return df_binary
 
@@ -151,8 +155,11 @@ class AdvancedTrainer:
 
             config_lgbm = self.config.copy()
             config_lgbm['model']['type'] = 'lightgbm'
-            config_lgbm['model']['lightgbm']['num_class'] = 2
             config_lgbm['model']['lightgbm']['objective'] = 'binary'
+
+            # Remover num_class para binário
+            if 'num_class' in config_lgbm['model']['lightgbm']:
+                del config_lgbm['model']['lightgbm']['num_class']
 
             trainer_lgbm = ModelTrainer(config_lgbm)
             results_lgbm = trainer_lgbm.train(df_train, df_val)
@@ -167,7 +174,7 @@ def main():
     parser = argparse.ArgumentParser(description="Treinamento Avançado para Scalping")
     parser.add_argument('--symbol', type=str, default='BTCUSDT', help='Símbolo para treinar')
     parser.add_argument('--timeframe', type=str, default='15m', help='Timeframe (5m, 15m, 1h, etc)')
-    parser.add_argument('--config', type=str, default='config/config.yaml', help='Arquivo de configuração')
+    parser.add_argument('--config', type=str, default='config/config_advanced.yaml', help='Arquivo de configuração')
     parser.add_argument('--top-features', type=int, default=30, help='Número de features a usar')
 
     args = parser.parse_args()

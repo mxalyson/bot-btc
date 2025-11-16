@@ -45,8 +45,10 @@ python scripts/train_model.py --symbol BTCUSDT --timeframe 15m
 
 ### Treinamento Avançado (Recomendado) 🔥
 ```bash
-python scripts/train_advanced.py --symbol BTCUSDT --timeframe 15m --top-features 30
+python scripts/train_advanced.py --symbol BTCUSDT --timeframe 15m
 ```
+
+> **Nota**: O treinamento avançado usa automaticamente `config/config_advanced.yaml` que já está otimizado!
 
 ### Parâmetros do Treinamento Avançado
 
