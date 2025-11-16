@@ -327,14 +327,20 @@ class ModelTrainer:
         logger.debug(f"evaluate: y_pred shape inicial = {y_pred.shape}, dtype = {y_pred.dtype}")
 
         # Garantir que y_pred é 1D array de integers
-        if len(y_pred.shape) > 1:
+        # Se y_pred for 2D (probabilidades por classe), pegar argmax
+        if len(y_pred.shape) > 1 and y_pred.shape[1] > 1:
+            logger.warning(f"y_pred é 2D com shape {y_pred.shape}, usando argmax para obter classe predita")
+            y_pred = np.argmax(y_pred, axis=1)
+        elif len(y_pred.shape) > 1:
+            # Se for 2D mas com apenas 1 coluna, fazer flatten
             logger.warning(f"y_pred é 2D com shape {y_pred.shape}, aplicando flatten")
             y_pred = y_pred.flatten()
+
         y_pred = y_pred.astype(int)
 
         # Garantir que y é 1D array
         if len(y.shape) > 1:
-            logger.warning(f"y é 2D com shape {y.shape}, aplicando flatten - ISTO É O PROBLEMA!")
+            logger.warning(f"y é 2D com shape {y.shape}, aplicando flatten")
             y = y.flatten()
 
         logger.debug(f"evaluate: Após ajustes - X: {X.shape}, y: {y.shape}, y_pred: {y_pred.shape}")
