@@ -14,7 +14,7 @@ data:
     - 5m
 
   # Período de dados históricos (em dias)
-  lookback_days: 180
+  lookback_days: 365
 
   # Diretórios
   raw_data_dir: "data/raw"
@@ -68,14 +68,14 @@ labeling:
   method: "triple_barrier"
 
   # Janela futura para análise (número de candles)
-  forward_window: 10
+  forward_window: 15        # Aumentado de 10 para 15 - observa mais tempo
 
   # Alvos em múltiplos de ATR
-  profit_target_atr: 1.5  # Take profit em 1.5x ATR
-  stop_loss_atr: 1.0      # Stop loss em 1.0x ATR
+  profit_target_atr: 2.0    # Aumentado de 1.5 - alvos maiores, sinais mais fortes
+  stop_loss_atr: 1.5        # Aumentado de 1.0 - mais tolerante
 
   # Mínimo de movimento para considerar sinal válido (em % ou ATR)
-  min_move_atr: 0.3
+  min_move_atr: 0.5         # Aumentado de 0.3 - sinais mais significativos
 
   # Balanceamento - se true, vai criar labels balanceadas
   # ATENÇÃO: Só habilite se tiver MUITO dado (100k+ amostras)
@@ -116,18 +116,19 @@ model:
   type: "xgboost"
 
   # Hiperparâmetros do XGBoost
+  # AJUSTADOS PARA REDUZIR OVERFITTING
   xgboost:
     objective: "multi:softprob"
     num_class: 3
-    max_depth: 6
-    learning_rate: 0.05
-    n_estimators: 300
-    subsample: 0.8
-    colsample_bytree: 0.8
-    min_child_weight: 3
-    gamma: 0.1
-    reg_alpha: 0.1
-    reg_lambda: 1.0
+    max_depth: 4                # Reduzido de 6 para 4 - árvores mais rasas
+    learning_rate: 0.03         # Reduzido de 0.05 - aprendizado mais lento
+    n_estimators: 100           # Reduzido de 300 - menos árvores
+    subsample: 0.7              # Reduzido de 0.8 - mais agressivo
+    colsample_bytree: 0.7       # Reduzido de 0.8 - mais agressivo
+    min_child_weight: 5         # Aumentado de 3 - exige mais amostras por folha
+    gamma: 0.3                  # Aumentado de 0.1 - mais penalização
+    reg_alpha: 1.0              # Aumentado de 0.1 - mais L1 regularization
+    reg_lambda: 2.0             # Aumentado de 1.0 - mais L2 regularization
     random_state: 42
     n_jobs: -1
     tree_method: "hist"
