@@ -267,12 +267,18 @@ def main():
     print_section("ETAPA 7: Treinamento do Modelo")
 
     # Adicionar scale_pos_weight para balancear classes
+    # No XGBoost binário: classe 0 = negativa, classe 1 = positiva
+    # LONG = 0 (minoritária 38%), SHORT = 1 (majoritária 62%)
+    # scale_pos_weight = sum(negative) / sum(positive) = LONG / SHORT
+    # Isso dá MAIS peso à classe positiva (SHORT) para compensar o desbalanceamento
     long_count = (df_train['target_class'] == 'LONG').sum()
     short_count = (df_train['target_class'] == 'SHORT').sum()
-    scale_pos_weight = short_count / long_count
+    scale_pos_weight = long_count / short_count  # Corrigido: era short/long (invertido)!
 
     config['model']['xgboost']['scale_pos_weight'] = scale_pos_weight
     logger.info(f"Class balancing: scale_pos_weight = {scale_pos_weight:.2f}")
+    logger.info(f"  LONG (0): {long_count} ({100*long_count/(long_count+short_count):.1f}%)")
+    logger.info(f"  SHORT (1): {short_count} ({100*short_count/(long_count+short_count):.1f}%)")
 
     # Treinar modelo final
     trainer_final = ModelTrainer(config)

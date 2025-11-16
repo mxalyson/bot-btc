@@ -390,10 +390,19 @@ class ModelTrainer:
         )
         logger.info(f"\n{report}")
 
-        # ROC AUC (multiclass)
+        # ROC AUC (binário ou multiclass)
         try:
-            roc_auc = roc_auc_score(y, y_proba, multi_class='ovr', average='macro')
-            logger.info(f"ROC AUC (macro): {roc_auc:.4f}")
+            # Detectar se é binário ou multiclass
+            n_classes = y_proba.shape[1] if len(y_proba.shape) > 1 else 1
+
+            if n_classes == 2:
+                # Classificação binária: usar apenas probabilidade da classe positiva (1)
+                roc_auc = roc_auc_score(y, y_proba[:, 1])
+                logger.info(f"ROC AUC (binary): {roc_auc:.4f}")
+            else:
+                # Classificação multiclass
+                roc_auc = roc_auc_score(y, y_proba, multi_class='ovr', average='macro')
+                logger.info(f"ROC AUC (macro): {roc_auc:.4f}")
         except Exception as e:
             logger.warning(f"Não foi possível calcular ROC AUC: {e}")
             roc_auc = None
