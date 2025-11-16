@@ -1,0 +1,179 @@
+# Configuração AVANÇADA do Pipeline de ML para Scalping na Bybit
+# Otimizada para máxima performance em trading de alta frequência
+
+# === DADOS ===
+data:
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - SUIUSDT
+
+  timeframes:
+    - 5m
+    - 15m
+
+  # Período de dados históricos (em dias)
+  lookback_days: 365
+
+  # Diretórios
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+
+  # Exchange
+  exchange: "bybit"
+  market_type: "linear"
+
+# === BYBIT API ===
+bybit:
+  api_key: ""
+  api_secret: ""
+  testnet: false
+
+# === FEATURE ENGINEERING ===
+features:
+  # Médias móveis - otimizadas para scalping
+  ema_periods:
+    - 9
+    - 21
+    - 50
+    - 200
+
+  # Indicadores técnicos
+  rsi_period: 14
+  stoch_period: 14
+  stoch_smooth: 3
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+
+  # Bollinger Bands
+  bb_period: 20
+  bb_std: 2
+
+  # ATR para volatilidade
+  atr_period: 14
+
+  # Volume
+  volume_ma_period: 20
+
+  # Normalização
+  price_normalization: "log_returns"
+  lookback_normalization: 20
+
+# === LABELING OTIMIZADO ===
+labeling:
+  method: "triple_barrier"
+
+  # AJUSTADO PARA SCALPING 15m
+  # Observa 20 candles = 5 horas à frente
+  forward_window: 20
+
+  # Alvos agressivos para scalping
+  # 2.5x ATR profit = ~0.5-1% em BTC
+  profit_target_atr: 2.5
+
+  # Stop loss apertado
+  # 1.2x ATR stop = ~0.3-0.6% em BTC
+  stop_loss_atr: 1.2
+
+  # Filtro de ruído - apenas movimentos significativos
+  min_move_atr: 0.6
+
+  # Sem balanceamento - vamos usar scale_pos_weight
+  balance_classes: false
+
+  classes:
+    - LONG
+    - SHORT
+    - NONE  # Será removido no treinamento avançado
+
+# === DATASET ===
+dataset:
+  # Divisão temporal
+  train_split: 0.70
+  val_split: 0.15
+  test_split: 0.15
+
+  drop_na: true
+
+  exclude_features:
+    - timestamp
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - target_class
+    - target_return
+    - barrier_hit
+
+# === MODELO OTIMIZADO ===
+model:
+  type: "xgboost"
+
+  # XGBoost OTIMIZADO para classificação binária de scalping
+  xgboost:
+    # Binário (será ajustado automaticamente no script)
+    objective: "binary:logistic"
+
+    # Hiperparâmetros otimizados para reduzir overfitting
+    max_depth: 5                    # Árvores médias
+    learning_rate: 0.05             # Taxa moderada
+    n_estimators: 150               # Número médio de árvores
+
+    # Regularização forte
+    min_child_weight: 7             # Mais amostras por folha
+    gamma: 0.5                      # Penalização forte
+    reg_alpha: 1.5                  # L1 forte
+    reg_lambda: 2.5                 # L2 forte
+
+    # Sampling agressivo contra overfitting
+    subsample: 0.75                 # 75% das amostras
+    colsample_bytree: 0.75          # 75% das features
+    colsample_bylevel: 0.75         # 75% por nível
+
+    # scale_pos_weight será calculado automaticamente
+    # baseado no desbalanceamento LONG/SHORT
+
+    random_state: 42
+    n_jobs: -1
+    tree_method: "hist"
+
+  # LightGBM alternativo
+  lightgbm:
+    objective: "binary"
+    max_depth: 5
+    learning_rate: 0.05
+    n_estimators: 150
+    min_child_weight: 7
+    reg_alpha: 1.5
+    reg_lambda: 2.5
+    subsample: 0.75
+    colsample_bytree: 0.75
+    random_state: 42
+    n_jobs: -1
+
+  output_dir: "models"
+  early_stopping_rounds: 30
+
+# === TREINAMENTO ===
+training:
+  normalize_features: true
+  scaler_type: "robust"  # Robust é melhor para outliers
+
+  use_validation: true
+
+  metrics:
+    - accuracy
+    - f1_macro
+    - precision_macro
+    - recall_macro
+    - roc_auc
+
+  verbose: true
+
+# === LOGGING ===
+logging:
+  level: "INFO"
+  log_file: "training_advanced.log"
+  log_dir: "logs"
