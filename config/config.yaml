@@ -106,6 +106,7 @@ dataset:
     - volume
     - target_class
     - target_return
+    - barrier_hit
 
 # === MODELO ===
 model:
