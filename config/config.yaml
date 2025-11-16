@@ -78,7 +78,9 @@ labeling:
   min_move_atr: 0.3
 
   # Balanceamento - se true, vai criar labels balanceadas
-  balance_classes: true
+  # ATENÇÃO: Só habilite se tiver MUITO dado (100k+ amostras)
+  # Com poucos dados, o balanceamento reduz demais o dataset
+  balance_classes: false
 
   # Classes de saída
   classes:

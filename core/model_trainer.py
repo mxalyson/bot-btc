@@ -314,6 +314,15 @@ class ModelTrainer:
         y_pred = self.model.predict(X)
         y_proba = self.model.predict_proba(X)
 
+        # Garantir que y_pred é 1D array de integers
+        if len(y_pred.shape) > 1:
+            y_pred = y_pred.flatten()
+        y_pred = y_pred.astype(int)
+
+        # Garantir que y é 1D array
+        if len(y.shape) > 1:
+            y = y.flatten()
+
         # Métricas gerais
         accuracy = accuracy_score(y, y_pred)
         f1_macro = f1_score(y, y_pred, average='macro')
@@ -328,18 +337,34 @@ class ModelTrainer:
         logger.info(f"Recall:          {recall_macro:.4f}")
 
         # Matriz de confusão
-        cm = confusion_matrix(y, y_pred)
+        # Detectar classes únicas presentes nos dados
+        unique_classes = sorted(np.unique(np.concatenate([y, y_pred])))
+        class_names = [self.inverse_label_mapping.get(c, f'Class_{c}') for c in unique_classes]
+
+        cm = confusion_matrix(y, y_pred, labels=unique_classes)
         logger.info(f"\nMatriz de Confusão:")
-        logger.info(f"{'':>12} {'LONG':>10} {'SHORT':>10} {'NONE':>10}")
-        for i, label in enumerate(['LONG', 'SHORT', 'NONE']):
-            logger.info(f"{label:>12} {cm[i][0]:>10} {cm[i][1]:>10} {cm[i][2]:>10}")
+
+        # Header dinâmico
+        header = f"{'':>12}"
+        for name in class_names:
+            header += f" {name:>10}"
+        logger.info(header)
+
+        # Linhas da matriz
+        for i, label in enumerate(class_names):
+            row = f"{label:>12}"
+            for j in range(len(class_names)):
+                row += f" {cm[i][j]:>10}"
+            logger.info(row)
 
         # Relatório de classificação
         logger.info(f"\nRelatório de Classificação:")
         report = classification_report(
             y, y_pred,
-            target_names=['LONG', 'SHORT', 'NONE'],
-            digits=4
+            labels=unique_classes,
+            target_names=class_names,
+            digits=4,
+            zero_division=0
         )
         logger.info(f"\n{report}")
 
