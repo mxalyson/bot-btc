@@ -156,7 +156,9 @@ class ModelTrainer:
             unknown = y[y_encoded.isna()].unique()
             raise ValueError(f"Labels desconhecidos encontrados: {unknown}")
 
-        return y_encoded.values
+        result = y_encoded.values
+        logger.debug(f"prepare_labels: retornando array com shape {result.shape}")
+        return result
 
     def train(
         self,
@@ -182,6 +184,7 @@ class ModelTrainer:
         y_train = self.prepare_labels(df_train, X_train.index)
 
         logger.info(f"Dataset de treino: {X_train.shape}")
+        logger.info(f"y_train shape após prepare_labels: {y_train.shape}, dtype: {y_train.dtype}")
         logger.info(f"Distribuição de labels:")
         for label, code in self.label_mapping.items():
             count = (y_train == code).sum()
@@ -315,18 +318,26 @@ class ModelTrainer:
         if self.model is None:
             raise ValueError("Modelo não foi treinado ainda")
 
+        logger.debug(f"evaluate: X shape = {X.shape}, y shape INICIAL = {y.shape}, y dtype = {y.dtype}")
+
         # Predições
         y_pred = self.model.predict(X)
         y_proba = self.model.predict_proba(X)
 
+        logger.debug(f"evaluate: y_pred shape inicial = {y_pred.shape}, dtype = {y_pred.dtype}")
+
         # Garantir que y_pred é 1D array de integers
         if len(y_pred.shape) > 1:
+            logger.warning(f"y_pred é 2D com shape {y_pred.shape}, aplicando flatten")
             y_pred = y_pred.flatten()
         y_pred = y_pred.astype(int)
 
         # Garantir que y é 1D array
         if len(y.shape) > 1:
+            logger.warning(f"y é 2D com shape {y.shape}, aplicando flatten - ISTO É O PROBLEMA!")
             y = y.flatten()
+
+        logger.debug(f"evaluate: Após ajustes - X: {X.shape}, y: {y.shape}, y_pred: {y_pred.shape}")
 
         # Métricas gerais
         accuracy = accuracy_score(y, y_pred)
