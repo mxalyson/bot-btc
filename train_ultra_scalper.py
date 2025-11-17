@@ -618,23 +618,40 @@ def train_ultra_scalper(symbol: str, days: int, config: dict):
     base_predictions_train = {}
     base_predictions_val = {}
 
-    # LightGBM
-    base_predictions_train['lightgbm'] = models['lightgbm'].predict(X_train)
-    base_predictions_val['lightgbm'] = models['lightgbm'].predict(X_val_selected)
-
-    # XGBoost
-    base_predictions_train['xgboost'] = models['xgboost'].predict(xgb.DMatrix(X_train))
-    base_predictions_val['xgboost'] = models['xgboost'].predict(xgb.DMatrix(X_val_selected))
-
-    # Transformer
+    # Determine if we need to align to sequence length
     if 'transformer' in models:
+        sequence_length = models['sequence_length']
+        print(f"   Aligning all predictions to sequence length offset: {sequence_length}")
+
+        # Align all data to sequence-based indices
+        X_train_aligned = X_train.iloc[sequence_length:]
+        X_val_aligned = X_val_selected.iloc[sequence_length:]
+
+        # LightGBM - predict on aligned data
+        base_predictions_train['lightgbm'] = models['lightgbm'].predict(X_train_aligned)
+        base_predictions_val['lightgbm'] = models['lightgbm'].predict(X_val_aligned)
+
+        # XGBoost - predict on aligned data
+        base_predictions_train['xgboost'] = models['xgboost'].predict(xgb.DMatrix(X_train_aligned))
+        base_predictions_val['xgboost'] = models['xgboost'].predict(xgb.DMatrix(X_val_aligned))
+
+        # Transformer - already aligned
         base_predictions_train['transformer'] = models['transformer'].predict(X_train_seq, verbose=0).flatten()
         base_predictions_val['transformer'] = models['transformer'].predict(X_val_seq, verbose=0).flatten()
 
         # Adjust y for sequence offset
         y_train_adj = y_train.iloc[sequence_length:].values
         y_val_adj = y_val.iloc[sequence_length:].values
+
+        print(f"   ✅ All predictions aligned: {len(base_predictions_train['lightgbm'])} samples")
     else:
+        # No transformer, use all data
+        base_predictions_train['lightgbm'] = models['lightgbm'].predict(X_train)
+        base_predictions_val['lightgbm'] = models['lightgbm'].predict(X_val_selected)
+
+        base_predictions_train['xgboost'] = models['xgboost'].predict(xgb.DMatrix(X_train))
+        base_predictions_val['xgboost'] = models['xgboost'].predict(xgb.DMatrix(X_val_selected))
+
         y_train_adj = y_train.values
         y_val_adj = y_val.values
 
