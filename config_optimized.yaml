@@ -1,0 +1,211 @@
+# ============================================================================
+# ULTRA SCALPER - CONFIGURAÇÃO OTIMIZADA
+# ============================================================================
+# Baseado em validação de 365 dias (2799 trades, 58.9% WR, +2101% ROI)
+#
+# Otimizações implementadas:
+# 1. Filtro de Regime Inteligente (bloqueia low_vol_bull: 49.4% WR)
+# 2. Confiança Adaptativa por Regime
+# 3. Position Sizing Dinâmico
+# 4. Stop Loss por Volatilidade
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Regimes permitidos com configurações específicas
+  regimes:
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.10      # Regime imbatível (69.5% WR, +702% ROI)
+      position_multiplier: 1.5   # Aumenta posição (é muito bom!)
+      stop_atr_mult: 1.5         # Stop mais largo (alta volatilidade)
+
+    medium_bear:
+      enabled: true
+      min_confidence: 0.15      # 63.2% WR, +185% ROI
+      position_multiplier: 1.2
+      stop_atr_mult: 1.2
+
+    high_vol_bull:
+      enabled: true
+      min_confidence: 0.20      # 60.0% WR, +260% ROI
+      position_multiplier: 1.2
+      stop_atr_mult: 1.5
+
+    low_vol_bear:
+      enabled: true
+      min_confidence: 0.25      # 59.9% WR, +57% ROI
+      position_multiplier: 1.0
+      stop_atr_mult: 1.0
+
+    medium_bull:
+      enabled: true
+      min_confidence: 0.35      # 56.3% WR, +129% ROI (mais conservador)
+      position_multiplier: 0.9
+      stop_atr_mult: 1.2
+
+    low_vol_bull:
+      enabled: false            # BLOQUEADO! (49.4% WR inaceitável)
+      min_confidence: 0.99      # Praticamente impossível
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Ajustes de confiança por nível
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.0
+      description: "Altíssima confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 0.8
+      description: "Alta confiança"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.6
+      description: "Média confiança"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.4
+      description: "Baixa confiança (só em regimes fortes)"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING DINÂMICO
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "dynamic"  # "fixed" ou "dynamic"
+  base_size_usd: 100.0
+  max_size_usd: 500.0
+
+  # Multiplicadores por regime já definidos acima em regime_filter.regimes[regime].position_multiplier
+  # Multiplicadores por confiança já definidos acima em confidence_filter.tiers
+
+  # Fórmula final: base_size * regime_mult * confidence_mult
+
+# ----------------------------------------------------------------------------
+# STOP LOSS DINÂMICO
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 2.0
+
+  # Multiplicadores por regime já definidos em regime_filter.regimes[regime].stop_atr_mult
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT OTIMIZADO
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"  # Risk-reward assimétrico
+
+  # Take profit baseado no regime
+  regimes:
+    high_vol_bear:
+      tp_atr_mult: 2.0      # Regime forte = TP mais ambicioso
+      risk_reward: 2.5
+
+    medium_bear:
+      tp_atr_mult: 1.8
+      risk_reward: 2.0
+
+    high_vol_bull:
+      tp_atr_mult: 1.8
+      risk_reward: 2.0
+
+    low_vol_bear:
+      tp_atr_mult: 1.5
+      risk_reward: 1.8
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.2
+      risk_reward: 1.2
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20       # Períodos para calcular volatilidade
+  trend_window: 50            # Períodos para calcular tendência
+
+  # Quantis para classificação de volatilidade
+  vol_quantiles:
+    low: 0.33                 # 33º percentil
+    high: 0.67                # 67º percentil
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true        # Kyle's Lambda, Amihud, Roll's Spread
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 50
+  max_concurrent_trades: 3
+  max_daily_loss_pct: 5.0    # Para trading com alavancagem
+  max_drawdown_pct: 10.0
+
+  # Pausa automática se performance ruim
+  performance_check:
+    enabled: true
+    window_trades: 20
+    min_win_rate: 0.45        # Se WR < 45% nas últimas 20 trades, pausar
+    cooldown_minutes: 60
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.10
+    - 0.30
+    - 0.50
+    - 0.70
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true    # Log quando low_vol_bull bloqueia trade
