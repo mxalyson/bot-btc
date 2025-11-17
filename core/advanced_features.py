@@ -182,7 +182,7 @@ class MarketRegimeDetector:
         regimes[mask] = regimes_clean
 
         # Forward fill NaNs
-        df['market_regime'] = pd.Series(regimes).replace(-1, np.nan).fillna(method='ffill').fillna(0).astype(int)
+        df['market_regime'] = pd.Series(regimes).replace(-1, np.nan).ffill().fillna(0).astype(int)
 
         # One-hot encoding
         for i in range(self.n_regimes):
