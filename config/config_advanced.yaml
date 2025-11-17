@@ -60,24 +60,24 @@ features:
   price_normalization: "log_returns"
   lookback_normalization: 20
 
-# === LABELING OTIMIZADO ===
+# === LABELING OTIMIZADO PARA SCALPING 15m ===
 labeling:
   method: "triple_barrier"
 
-  # AJUSTADO PARA SCALPING 15m
-  # Observa 20 candles = 5 horas à frente
-  forward_window: 20
+  # SCALPING RÁPIDO - Janela menor para trades mais frequentes
+  # 8 candles = 2 horas (ideal para scalping)
+  forward_window: 8
 
-  # Alvos agressivos para scalping
-  # 2.5x ATR profit = ~0.5-1% em BTC
-  profit_target_atr: 2.5
+  # Alvos REALISTAS para scalping 15m
+  # 1.5x ATR = ~0.3-0.5% em BTC (atingível em 15m)
+  profit_target_atr: 1.5
 
-  # Stop loss apertado
-  # 1.2x ATR stop = ~0.3-0.6% em BTC
-  stop_loss_atr: 1.2
+  # Stop loss apertado para scalping
+  # 1.0x ATR = ~0.2-0.35% stop
+  stop_loss_atr: 1.0
 
-  # Filtro de ruído - apenas movimentos significativos
-  min_move_atr: 0.6
+  # Filtro de ruído MENOR para capturar mais trades
+  min_move_atr: 0.3
 
   # Sem balanceamento - vamos usar scale_pos_weight
   balance_classes: false
@@ -111,26 +111,26 @@ dataset:
 model:
   type: "xgboost"
 
-  # XGBoost OTIMIZADO para classificação binária de scalping
+  # XGBoost OTIMIZADO para SCALPING 15m (alta frequência)
   xgboost:
     # Binário - NÃO usar num_class para binary:logistic!
     objective: "binary:logistic"
 
-    # Hiperparâmetros otimizados para reduzir overfitting
-    max_depth: 5                    # Árvores médias
-    learning_rate: 0.05             # Taxa moderada
-    n_estimators: 150               # Número médio de árvores
+    # Hiperparâmetros AGRESSIVOS para reduzir overfitting em 15m
+    max_depth: 3                    # Árvores RASAS para menos overfitting
+    learning_rate: 0.03             # Taxa LENTA para melhor generalização
+    n_estimators: 100               # Menos árvores
 
-    # Regularização forte
-    min_child_weight: 7             # Mais amostras por folha
-    gamma: 0.5                      # Penalização forte
-    reg_alpha: 1.5                  # L1 forte
-    reg_lambda: 2.5                 # L2 forte
+    # Regularização MUITO FORTE (15m é muito ruidoso)
+    min_child_weight: 10            # Exige MUITAS amostras por folha
+    gamma: 0.8                      # Penalização MUITO forte
+    reg_alpha: 2.0                  # L1 MUITO forte
+    reg_lambda: 3.0                 # L2 MUITO forte
 
-    # Sampling agressivo contra overfitting
-    subsample: 0.75                 # 75% das amostras
-    colsample_bytree: 0.75          # 75% das features
-    colsample_bylevel: 0.75         # 75% por nível
+    # Sampling MUITO agressivo contra overfitting
+    subsample: 0.65                 # Apenas 65% das amostras
+    colsample_bytree: 0.65          # Apenas 65% das features
+    colsample_bylevel: 0.65         # 65% por nível
 
     # scale_pos_weight será calculado automaticamente
     # baseado no desbalanceamento LONG/SHORT
