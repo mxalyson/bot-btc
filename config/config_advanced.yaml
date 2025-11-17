@@ -48,6 +48,25 @@ features:
     enabled: true
     higher_timeframes: [1h, 4h]
 
+# === LABELING (Triple Barrier Method) ===
+labeling:
+  method: "triple_barrier_dynamic"  # Usa barreiras dinâmicas baseadas em volatilidade
+  forward_window: 8  # 8 candles = 2 horas em 15m
+
+  # Profit target (dinâmico)
+  profit_target_atr: 1.5
+  profit_target_dynamic: true
+  profit_multiplier_low_vol: 1.2
+  profit_multiplier_high_vol: 2.0
+
+  # Stop loss (dinâmico)
+  stop_loss_atr: 1.0
+  stop_loss_dynamic: true
+  stop_multiplier_low_vol: 0.8
+  stop_multiplier_high_vol: 1.5
+
+  time_limit: 12  # 3 horas em 15m
+
 # === MODELO ===
 model:
   architecture: "transformer"
@@ -83,6 +102,12 @@ training:
     patience: 15
     monitor: "val_auc"
 
+  reduce_lr:
+    enabled: true
+    factor: 0.5
+    patience: 7
+    min_lr: 0.00001
+
 # === ENSEMBLE ===
 ensemble:
   enabled: true
@@ -106,6 +131,7 @@ dataset:
     - target_class
     - target_barrier
     - target_return
+    - barrier_hit  # String categórica (UPPER/LOWER/TIME)
 
 # === BACKTESTING ===
 backtesting:
