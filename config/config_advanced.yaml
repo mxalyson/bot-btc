@@ -1,101 +1,100 @@
-# Configuração AVANÇADA do Pipeline de ML para Scalping na Bybit
-# Otimizada para máxima performance em trading de alta frequência
+# Configuração AVANÇADA para Deep Learning
+# Inclui TODAS as melhorias: Wavelet, Multi-Timeframe, Transformer, etc.
 
 # === DADOS ===
 data:
   symbols:
     - BTCUSDT
     - ETHUSDT
-    - SUIUSDT
 
   timeframes:
-    - 5m
     - 15m
+    - 1h    # Multi-timeframe
+    - 4h    # Multi-timeframe
 
-  # Período de dados históricos (em dias)
-  lookback_days: 365
+  lookback_days: 730  # 2 anos
 
-  # Diretórios
   raw_data_dir: "data/raw"
   processed_data_dir: "data/processed"
-
-  # Exchange
   exchange: "bybit"
   market_type: "linear"
 
-# === BYBIT API ===
-bybit:
-  api_key: ""
-  api_secret: ""
-  testnet: false
-
 # === FEATURE ENGINEERING ===
 features:
-  # Médias móveis - otimizadas para scalping
-  ema_periods:
-    - 9
-    - 21
-    - 50
-    - 200
-
-  # Indicadores técnicos
+  ema_periods: [9, 21, 50, 200]
   rsi_period: 14
   stoch_period: 14
   stoch_smooth: 3
   macd_fast: 12
   macd_slow: 26
   macd_signal: 9
-
-  # Bollinger Bands
   bb_period: 20
   bb_std: 2
-
-  # ATR para volatilidade
   atr_period: 14
-
-  # Volume
   volume_ma_period: 20
 
-  # Normalização
-  price_normalization: "log_returns"
-  lookback_normalization: 20
+  # NOVAS FEATURES AVANÇADAS
+  wavelet:
+    enabled: true
+    wavelet_type: 'db4'
+    decomposition_level: 3
 
-# === LABELING OTIMIZADO PARA SCALPING 15m ===
-labeling:
-  method: "triple_barrier"
+  market_regime:
+    enabled: true
+    n_regimes: 3
+    lookback: 100
 
-  # SCALPING RÁPIDO - Janela menor para trades mais frequentes
-  # 8 candles = 2 horas (ideal para scalping)
-  forward_window: 8
+  multi_timeframe:
+    enabled: true
+    higher_timeframes: [1h, 4h]
 
-  # Alvos REALISTAS para scalping 15m
-  # 1.5x ATR = ~0.3-0.5% em BTC (atingível em 15m)
-  profit_target_atr: 1.5
+# === MODELO ===
+model:
+  architecture: "transformer"
+  sequence_length: 40  # Aumentado de 20 para 40
 
-  # Stop loss apertado para scalping
-  # 1.0x ATR = ~0.2-0.35% stop
-  stop_loss_atr: 1.0
+  transformer:
+    d_model: 128
+    num_heads: 8
+    num_layers: 3
+    ff_dim: 256
+    dropout: 0.3
 
-  # Filtro de ruído MENOR para capturar mais trades
-  min_move_atr: 0.3
+  deep_learning:
+    conv_filters: [32, 32, 32]
+    conv_kernels: [3, 5, 7]
+    lstm_units: 128
+    attention_units: 64
+    dropout_rate: 0.3
 
-  # Sem balanceamento - vamos usar scale_pos_weight
-  balance_classes: false
+  output_dir: "models"
 
-  classes:
-    - LONG
-    - SHORT
-    - NONE  # Será removido no treinamento avançado
+# === TRAINING ===
+training:
+  optimizer: "adam"
+  learning_rate: 0.001
+  loss: "focal_loss"
+  focal_loss_gamma: 2.0
+  epochs: 100
+  batch_size: 64
+
+  early_stopping:
+    enabled: true
+    patience: 15
+    monitor: "val_auc"
+
+# === ENSEMBLE ===
+ensemble:
+  enabled: true
+  models: [deep_learning, lightgbm, xgboost]
+  method: "stacking"
+  meta_learner: "logistic_regression"
 
 # === DATASET ===
 dataset:
-  # Divisão temporal
-  train_split: 0.70
-  val_split: 0.15
-  test_split: 0.15
-
-  drop_na: true
-
+  train_pct: 0.70
+  val_pct: 0.15
+  test_pct: 0.15
   exclude_features:
     - timestamp
     - open
@@ -103,77 +102,19 @@ dataset:
     - low
     - close
     - volume
+    - target_price
     - target_class
+    - target_barrier
     - target_return
-    - barrier_hit
 
-# === MODELO OTIMIZADO ===
-model:
-  type: "xgboost"
-
-  # XGBoost OTIMIZADO para SCALPING 15m (alta frequência)
-  xgboost:
-    # Binário - NÃO usar num_class para binary:logistic!
-    objective: "binary:logistic"
-
-    # Hiperparâmetros AGRESSIVOS para reduzir overfitting em 15m
-    max_depth: 3                    # Árvores RASAS para menos overfitting
-    learning_rate: 0.03             # Taxa LENTA para melhor generalização
-    n_estimators: 100               # Menos árvores
-
-    # Regularização MUITO FORTE (15m é muito ruidoso)
-    min_child_weight: 10            # Exige MUITAS amostras por folha
-    gamma: 0.8                      # Penalização MUITO forte
-    reg_alpha: 2.0                  # L1 MUITO forte
-    reg_lambda: 3.0                 # L2 MUITO forte
-
-    # Sampling MUITO agressivo contra overfitting
-    subsample: 0.65                 # Apenas 65% das amostras
-    colsample_bytree: 0.65          # Apenas 65% das features
-    colsample_bylevel: 0.65         # 65% por nível
-
-    # scale_pos_weight será calculado automaticamente
-    # baseado no desbalanceamento LONG/SHORT
-
-    random_state: 42
-    n_jobs: -1
-    tree_method: "hist"
-
-  # LightGBM alternativo
-  lightgbm:
-    objective: "binary"
-    max_depth: 5
-    learning_rate: 0.05
-    n_estimators: 150
-    min_child_weight: 7
-    reg_alpha: 1.5
-    reg_lambda: 2.5
-    subsample: 0.75
-    colsample_bytree: 0.75
-    random_state: 42
-    n_jobs: -1
-
-  output_dir: "models"
-  early_stopping_rounds: 30
-
-# === TREINAMENTO ===
-training:
-  normalize_features: true
-  scaler_type: "robust"  # Robust é melhor para outliers
-
-  use_validation: true
-
-  metrics:
-    - accuracy
-    - f1_macro
-    - precision_macro
-    - recall_macro
-    - roc_auc
-
-  verbose: true
+# === BACKTESTING ===
+backtesting:
+  initial_capital: 10000
+  fee_rate: 0.0006
+  slippage: 0.0001
+  cooldown_minutes: 15
+  position_size: 0.3
 
 # === LOGGING ===
 logging:
-  level: "INFO"
-  log_file: "training_advanced.log"
-  log_dir: "logs"
+  level: INFO
