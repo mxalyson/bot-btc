@@ -1,0 +1,225 @@
+# ============================================================================
+# ULTRA CONSERVATIVE SCALPER - Máximo Win Rate
+# ============================================================================
+# Objetivo: 70-75% Win Rate (80% é quase impossível)
+# Estratégia: POUCOS trades, MAS com ALTA certeza
+#
+# Sacrifícios:
+# - Menos trades (~30% do original)
+# - ROI menor em valor absoluto
+# - Mas MUITO mais consistente e seguro
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME (ULTRA RIGOROSO)
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Opera APENAS nos 2 melhores regimes
+  regimes:
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.70      # 🔥 MUITO ALTO! (era 0.10)
+      position_multiplier: 1.0   # Conservador (era 2.0)
+      stop_atr_mult: 1.0
+      trailing_stop: false       # ❌ SEM trailing
+
+    medium_bear:
+      enabled: true
+      min_confidence: 0.65      # 🔥 MUITO ALTO! (era 0.15)
+      position_multiplier: 1.0
+      stop_atr_mult: 1.0
+      trailing_stop: false       # ❌ SEM trailing
+
+    # ❌ TODOS OS OUTROS REGIMES BLOQUEADOS
+    high_vol_bull:
+      enabled: false
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    low_vol_bear:
+      enabled: false
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    medium_bull:
+      enabled: false
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    low_vol_bull:
+      enabled: false
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+# ----------------------------------------------------------------------------
+# FILTRO TEMPORAL (DESATIVADO)
+# ----------------------------------------------------------------------------
+temporal_filter:
+  enabled: false
+  block_weekdays:
+    enabled: false
+    blocked_days: []
+  block_hours:
+    enabled: false
+    blocked_hours_utc: []
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA (ULTRA RIGOROSA)
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Só opera com ALTA confiança
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.0
+      description: "Apenas ultra-alta confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 0.0  # ❌ BLOQUEADO
+      description: "Bloqueado"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.0  # ❌ BLOQUEADO
+      description: "Bloqueado"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.0  # ❌ BLOQUEADO
+      description: "Bloqueado"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING (CONSERVADOR)
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "fixed"  # Fixo para maior previsibilidade
+  base_size_usd: 100.0
+  max_size_usd: 150.0  # Máximo conservador
+
+# ----------------------------------------------------------------------------
+# STOP LOSS (APERTADO)
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0  # Apertado
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 1.2
+
+# ----------------------------------------------------------------------------
+# TRAILING STOP (DESATIVADO)
+# ----------------------------------------------------------------------------
+trailing_stop:
+  enabled: false
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT (AMBICIOSO)
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"
+
+  # TPs mais ambiciosos para compensar poucos trades
+  regimes:
+    high_vol_bear:
+      tp_atr_mult: 3.0      # 🔥 ALTO! (deixa lucro correr)
+      risk_reward: 3.5      # 1:3.5 risk-reward
+
+    medium_bear:
+      tp_atr_mult: 2.5
+      risk_reward: 3.0
+
+    high_vol_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bear:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.0
+      risk_reward: 1.0
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20
+  trend_window: 50
+  vol_quantiles:
+    low: 0.33
+    high: 0.67
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT (ULTRA CONSERVADOR)
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 10        # 🔥 MUITO BAIXO! Só os melhores
+  max_concurrent_trades: 1    # 🔥 APENAS 1 por vez
+  max_daily_loss_pct: 2.0     # 🔥 Para rápido se ruim
+  max_drawdown_pct: 5.0
+
+  # Pausa automática agressiva
+  performance_check:
+    enabled: true
+    window_trades: 10
+    min_win_rate: 0.60        # 🔥 Se cair abaixo de 60%, para!
+    cooldown_minutes: 120
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.70  # Apenas alta confiança
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true
+  log_high_confidence_only: true
