@@ -617,7 +617,7 @@ def main():
 
     # Load conservative config
     opt_config_path = Path(__file__).parent / 'config_conservative.yaml'
-    with open(opt_config_path, 'r') as f:
+    with open(opt_config_path, 'r', encoding='utf-8') as f:
         opt_config = yaml.safe_load(f)
 
     # Setup logging
