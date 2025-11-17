@@ -35,18 +35,21 @@ class Backtester:
         fee_rate: float = 0.0006,  # 0.06% Bybit taker fee
         slippage: float = 0.0001,   # 0.01% slippage
         position_size: float = 1.0,  # 100% do capital por trade
-        risk_per_trade: float = 0.02  # 2% risco máximo por trade
+        risk_per_trade: float = 0.02,  # 2% risco máximo por trade
+        cooldown_minutes: int = 15  # Cooldown entre trades (evita overtrading)
     ):
         self.initial_capital = initial_capital
         self.fee_rate = fee_rate
         self.slippage = slippage
         self.position_size = position_size
         self.risk_per_trade = risk_per_trade
+        self.cooldown_minutes = cooldown_minutes
 
         # State
         self.trades = []
         self.equity_curve = []
         self.current_position = None
+        self.last_trade_time = None  # Timestamp do último trade
 
     def run(
         self,
@@ -71,33 +74,47 @@ class Backtester:
         logger.info(f"Capital inicial: ${self.initial_capital:,.2f}")
         logger.info(f"Fee rate: {self.fee_rate*100:.2f}%")
         logger.info(f"Slippage: {self.slippage*100:.2f}%")
+        if self.cooldown_minutes > 0:
+            logger.info(f"Cooldown: {self.cooldown_minutes} minutos entre trades")
 
         capital = self.initial_capital
         self.trades = []
         self.equity_curve = [capital]
+        self.last_trade_time = None
 
         # Converter predições em sinais
         signals = self._predictions_to_signals(predictions, threshold)
 
         # Simular trades
         for i in range(len(df)):
+            current_time = df.iloc[i]['timestamp']
+
             # Pular se não há sinal
             if signals[i] == 0:  # 0 = no trade
                 self.equity_curve.append(capital)
                 continue
+
+            # Verificar cooldown
+            if self.last_trade_time is not None and self.cooldown_minutes > 0:
+                time_since_last_trade = (current_time - self.last_trade_time).total_seconds() / 60
+                if time_since_last_trade < self.cooldown_minutes:
+                    # Ainda em cooldown, pular trade
+                    self.equity_curve.append(capital)
+                    continue
 
             # Executar trade
             trade_result = self._execute_trade(
                 entry_price=df.iloc[i]['close'],
                 signal=signals[i],  # 1=LONG, -1=SHORT
                 actual_label=actual_labels[i],
-                timestamp=df.iloc[i]['timestamp'],
+                timestamp=current_time,
                 capital=capital
             )
 
             if trade_result:
                 self.trades.append(trade_result)
                 capital += trade_result['pnl_net']
+                self.last_trade_time = current_time  # Atualizar último trade
 
             self.equity_curve.append(capital)
 
