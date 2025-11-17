@@ -536,12 +536,20 @@ class OptimizedUltraValidator:
 
     def monte_carlo_simulation(self, trades: List[Dict], n_simulations=1000) -> Dict:
         """Monte Carlo simulation."""
-        if not trades:
+        # Handle both list and DataFrame inputs
+        if isinstance(trades, pd.DataFrame):
+            if trades.empty:
+                return {}
+            df_trades = trades
+        elif isinstance(trades, list):
+            if not trades:
+                return {}
+            df_trades = pd.DataFrame(trades)
+        else:
             return {}
 
         print(f"\n🎲 Monte Carlo Simulation ({n_simulations} runs)...")
 
-        df_trades = pd.DataFrame(trades) if isinstance(trades, list) else trades
         pnl_values = df_trades['pnl_amount'].values
 
         simulation_results = []
