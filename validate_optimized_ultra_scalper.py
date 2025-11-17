@@ -593,7 +593,7 @@ def main():
     args = parser.parse_args()
 
     # Load configs
-    config = load_config()
+    config = load_config('standard')
     config['initial_capital'] = args.initial_capital
 
     # Load optimized config
@@ -601,7 +601,9 @@ def main():
     with open(opt_config_path, 'r') as f:
         opt_config = yaml.safe_load(f)
 
-    logger = setup_logging("validate_optimized", config.get('log_level', 'INFO'))
+    # Setup logging
+    from loguru import logger as loguru_logger
+    logger = loguru_logger
 
     print("=" * 80)
     print("🔬 OPTIMIZED ULTRA SCALPER VALIDATION")
