@@ -426,7 +426,13 @@ class OptimizedUltraValidator:
                 if position['trailing_active']:
                     trailing_distance = atr * trailing_config['distance_atr']
                     new_trailing = position['peak_price'] - trailing_distance
-                    position['trailing_stop'] = max(position.get('trailing_stop', position['stop_loss']), new_trailing, position['stop_loss'])
+
+                    # Initialize trailing stop if None
+                    if position['trailing_stop'] is None:
+                        position['trailing_stop'] = position['stop_loss']
+
+                    # Update to highest (most protective) stop
+                    position['trailing_stop'] = max(position['trailing_stop'], new_trailing, position['stop_loss'])
 
                 # Check trailing stop hit
                 if position['trailing_active'] and position['trailing_stop'] and low <= position['trailing_stop']:
@@ -445,7 +451,13 @@ class OptimizedUltraValidator:
                 if position['trailing_active']:
                     trailing_distance = atr * trailing_config['distance_atr']
                     new_trailing = position['peak_price'] + trailing_distance
-                    position['trailing_stop'] = min(position.get('trailing_stop', position['stop_loss']), new_trailing, position['stop_loss'])
+
+                    # Initialize trailing stop if None
+                    if position['trailing_stop'] is None:
+                        position['trailing_stop'] = position['stop_loss']
+
+                    # Update to lowest (most protective) stop
+                    position['trailing_stop'] = min(position['trailing_stop'], new_trailing, position['stop_loss'])
 
                 # Check trailing stop hit
                 if position['trailing_active'] and position['trailing_stop'] and high >= position['trailing_stop']:
