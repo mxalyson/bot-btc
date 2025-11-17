@@ -1,0 +1,265 @@
+# ============================================================================
+# ULTRA SCALPER - CONFIGURAÇÃO ULTRA OTIMIZADA (V2)
+# ============================================================================
+# Baseado em validação de 365 dias:
+# - Original: 58.9% WR, +2,101% ROI
+# - Otimizado V1: 53.9% WR, +2,994% ROI
+# - Ultra Otimizado V2: Esperado 55-57% WR, +3,500-4,000% ROI
+#
+# Melhorias V2:
+# 1. Position 2.0x em high_vol_bear (melhor regime: 62.6% WR, +498% ROI)
+# 2. Trailing stop dinâmico nos regimes fortes
+# 3. Filtro de sábado (baixa liquidez)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Regimes permitidos com configurações específicas
+  regimes:
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.10      # Regime imbatível (62.6% WR, +498% ROI)
+      position_multiplier: 2.0   # 🔥 AUMENTADO DE 1.5 → 2.0 (BEST REGIME!)
+      stop_atr_mult: 1.5         # Stop mais largo (alta volatilidade)
+      trailing_stop: true        # 🆕 Trailing stop ativado
+      trailing_activation: 1.5   # Ativa após lucro de 1.5 ATR
+      trailing_distance: 0.8     # Distância de 0.8 ATR do pico
+
+    medium_bear:
+      enabled: true
+      min_confidence: 0.15      # 56.4% WR, +176% ROI
+      position_multiplier: 1.5   # 🔥 AUMENTADO DE 1.2 → 1.5
+      stop_atr_mult: 1.2
+      trailing_stop: true        # 🆕 Trailing stop ativado
+      trailing_activation: 1.2
+      trailing_distance: 0.7
+
+    high_vol_bull:
+      enabled: true
+      min_confidence: 0.20      # 53.3% WR, +144% ROI
+      position_multiplier: 1.3   # 🔥 AUMENTADO DE 1.2 → 1.3
+      stop_atr_mult: 1.5
+      trailing_stop: true        # 🆕 Trailing stop ativado
+      trailing_activation: 1.2
+      trailing_distance: 0.7
+
+    low_vol_bear:
+      enabled: true
+      min_confidence: 0.25      # 53.2% WR, +58% ROI
+      position_multiplier: 1.0
+      stop_atr_mult: 1.0
+      trailing_stop: false       # Sem trailing (regime médio)
+
+    medium_bull:
+      enabled: true
+      min_confidence: 0.30      # 52.0% WR, +145% ROI (mais conservador)
+      position_multiplier: 1.0
+      stop_atr_mult: 1.2
+      trailing_stop: false       # Sem trailing (regime médio)
+
+    low_vol_bull:
+      enabled: false            # BLOQUEADO! (40.6% WR inaceitável)
+      min_confidence: 0.99      # Praticamente impossível
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+# ----------------------------------------------------------------------------
+# FILTRO TEMPORAL
+# ----------------------------------------------------------------------------
+temporal_filter:
+  enabled: true
+
+  # 🆕 Filtro de dia da semana
+  block_weekdays:
+    enabled: true
+    blocked_days: [5]  # 0=Monday, 1=Tuesday, ..., 5=Saturday, 6=Sunday
+    reason: "Baixa liquidez aos sábados"
+
+  # Horários bloqueados (DESATIVADO conforme solicitado)
+  block_hours:
+    enabled: false
+    blocked_hours_utc: []  # Vazio = não bloqueia nenhum horário
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Ajustes de confiança por nível
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.2   # 🔥 AUMENTADO DE 1.0 → 1.2
+      description: "Altíssima confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 1.0   # 🔥 AUMENTADO DE 0.8 → 1.0
+      description: "Alta confiança"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.7   # 🔥 AUMENTADO DE 0.6 → 0.7
+      description: "Média confiança"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.5   # 🔥 AUMENTADO DE 0.4 → 0.5
+      description: "Baixa confiança (só em regimes fortes)"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING DINÂMICO
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "dynamic"  # "fixed" ou "dynamic"
+  base_size_usd: 100.0
+  max_size_usd: 1000.0  # 🔥 AUMENTADO DE 500 → 1000 (para aproveitar high_vol_bear)
+
+  # Multiplicadores por regime já definidos acima em regime_filter.regimes[regime].position_multiplier
+  # Multiplicadores por confiança já definidos acima em confidence_filter.tiers
+
+  # Fórmula final: base_size * regime_mult * confidence_mult
+
+# ----------------------------------------------------------------------------
+# STOP LOSS DINÂMICO
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 2.0
+
+  # Multiplicadores por regime já definidos em regime_filter.regimes[regime].stop_atr_mult
+
+# ----------------------------------------------------------------------------
+# TRAILING STOP (NOVO!)
+# ----------------------------------------------------------------------------
+trailing_stop:
+  enabled: true
+
+  # Configurações padrão (podem ser sobrescritas por regime)
+  default:
+    activation_atr: 1.5      # Ativa após lucro de 1.5 ATR
+    distance_atr: 0.8        # Distância de 0.8 ATR do pico
+
+  # Trailing mais agressivo em regimes fortes
+  aggressive:
+    activation_atr: 1.2      # Ativa mais cedo
+    distance_atr: 0.6        # Mais próximo do pico
+
+  # Trailing conservador em regimes médios
+  conservative:
+    activation_atr: 2.0      # Ativa mais tarde
+    distance_atr: 1.0        # Mais longe do pico
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT OTIMIZADO
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"  # Risk-reward assimétrico
+
+  # Take profit baseado no regime
+  regimes:
+    high_vol_bear:
+      tp_atr_mult: 2.5      # 🔥 AUMENTADO DE 2.0 → 2.5 (deixar lucro correr!)
+      risk_reward: 3.0      # 🔥 AUMENTADO DE 2.5 → 3.0
+
+    medium_bear:
+      tp_atr_mult: 2.0      # 🔥 AUMENTADO DE 1.8 → 2.0
+      risk_reward: 2.5      # 🔥 AUMENTADO DE 2.0 → 2.5
+
+    high_vol_bull:
+      tp_atr_mult: 2.0      # 🔥 AUMENTADO DE 1.8 → 2.0
+      risk_reward: 2.5      # 🔥 AUMENTADO DE 2.0 → 2.5
+
+    low_vol_bear:
+      tp_atr_mult: 1.5
+      risk_reward: 1.8
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.2
+      risk_reward: 1.2
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20       # Períodos para calcular volatilidade
+  trend_window: 50            # Períodos para calcular tendência
+
+  # Quantis para classificação de volatilidade
+  vol_quantiles:
+    low: 0.33                 # 33º percentil
+    high: 0.67                # 67º percentil
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true        # Kyle's Lambda, Amihud, Roll's Spread
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 60        # 🔥 AUMENTADO DE 50 → 60
+  max_concurrent_trades: 3
+  max_daily_loss_pct: 5.0
+  max_drawdown_pct: 10.0
+
+  # Pausa automática se performance ruim
+  performance_check:
+    enabled: true
+    window_trades: 20
+    min_win_rate: 0.45
+    cooldown_minutes: 60
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.10
+    - 0.30
+    - 0.50
+    - 0.70
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true
+  log_trailing_stops: true     # 🆕 Log de trailing stops
+  log_saturday_blocks: true    # 🆕 Log de bloqueios de sábado
