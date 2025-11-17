@@ -1,0 +1,32 @@
+{
+  "threshold": 0.7,
+  "position_size": 0.3,
+  "metrics": {
+    "total_trades": 22,
+    "winning_trades": 20,
+    "losing_trades": 2,
+    "win_rate": 0.9090909090909091,
+    "accuracy": 0.9090909090909091,
+    "total_return": 0.0456839771757237,
+    "annualized_return": 0.022665341842571074,
+    "total_pnl": 456.83977175723703,
+    "total_fees": 81.08969771934446,
+    "avg_win": 26.380893708309706,
+    "avg_loss": -35.38905120447946,
+    "avg_pnl": 20.765444170783418,
+    "best_trade": 26.90304199983337,
+    "worst_trade": -35.44965938184961,
+    "sharpe_ratio": 0.21479644106629395,
+    "sortino_ratio": 688997431301.7076,
+    "max_drawdown": -0.0068270958654462,
+    "calmar_ratio": 3.319909708209397,
+    "profit_factor": 7.454535459535146,
+    "initial_capital": 10000,
+    "final_capital": 10456.839771757237,
+    "period_days": 728,
+    "period_years": 1.9931553730321698,
+    "threshold": 0.7,
+    "position_size": 0.3,
+    "optimization_score": 6
+  }
+}
