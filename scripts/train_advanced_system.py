@@ -328,12 +328,13 @@ def main():
     model_dir = Path(config['model']['output_dir'])
     ensure_dir(model_dir)
     
-    model_name = f"{args.symbol.lower()}_{args.timeframe}_advanced"
+    base_name = f"{args.symbol.lower()}_{args.timeframe}_advanced"
+    model_name = f"{base_name}.keras"
     model.save(model_dir / model_name)
     logger.info(f"✓ Modelo salvo: {model_dir / model_name}")
-    
+
     # Salvar scaler
-    with open(model_dir / f"{model_name}_scaler.pkl", 'wb') as f:
+    with open(model_dir / f"{base_name}_scaler.pkl", 'wb') as f:
         pickle.dump(scaler, f)
     
     print_section("✅ TREINAMENTO AVANÇADO CONCLUÍDO!")
