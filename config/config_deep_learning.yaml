@@ -1,0 +1,193 @@
+# Configuração DEEP LEARNING para Scalping 15m
+# Arquitetura: CNN + Bidirectional LSTM + Multi-Head Attention
+# Baseado em research: microstructure features são 73% da performance
+
+# === DADOS ===
+data:
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+
+  timeframes:
+    - 15m
+
+  # Mais dados históricos para DL (precisa mais samples)
+  lookback_days: 730  # 2 anos
+
+  # Diretórios
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+
+  # Exchange
+  exchange: "bybit"
+  market_type: "linear"
+
+# === BYBIT API ===
+bybit:
+  api_key: ""
+  api_secret: ""
+  testnet: false
+
+# === FEATURE ENGINEERING ===
+features:
+  # Médias móveis
+  ema_periods:
+    - 9
+    - 21
+    - 50
+    - 200
+
+  # Indicadores técnicos
+  rsi_period: 14
+  stoch_period: 14
+  stoch_smooth: 3
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+
+  # Bollinger Bands
+  bb_period: 20
+  bb_std: 2
+
+  # ATR para volatilidade
+  atr_period: 14
+
+  # Volume
+  volume_ma_period: 20
+
+  # Normalização
+  price_normalization: "log_returns"
+  lookback_normalization: 20
+
+# === LABELING PARA SCALPING 15m ===
+labeling:
+  method: "triple_barrier"
+
+  # SCALPING RÁPIDO - 2 horas
+  forward_window: 8
+
+  # Alvos REALISTAS
+  profit_target_atr: 1.5   # ~0.3-0.5% profit
+  stop_loss_atr: 1.0       # ~0.2-0.35% stop
+
+  # Filtro de ruído
+  min_move_atr: 0.3
+
+  # Sem balanceamento (usaremos class_weight no DL)
+  balance_classes: false
+
+  classes:
+    - LONG
+    - SHORT
+    - NONE  # Será removido no treinamento
+
+# === DATASET ===
+dataset:
+  # Divisão temporal
+  train_split: 0.70
+  val_split: 0.15
+  test_split: 0.15
+
+  drop_na: true
+
+  exclude_features:
+    - timestamp
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - target_class
+    - target_return
+    - barrier_hit
+
+# === MODELO DEEP LEARNING ===
+model:
+  type: "deep_learning"
+
+  deep_learning:
+    # Arquitetura CNN
+    conv_filters: 64         # Filtros na primeira camada CNN
+    conv_kernel: 3           # Kernel size (3 candles)
+
+    # Arquitetura LSTM
+    lstm_units: 128          # Units no LSTM (bidirectional = 256 total)
+
+    # Attention
+    attention_units: 64      # Units na camada de atenção
+
+    # Dense layers
+    dense_units: 64          # Units na camada densa final
+
+    # Regularização
+    dropout_rate: 0.3        # Dropout para evitar overfitting
+    l2_reg: 0.001            # L2 regularization
+
+    # Otimizador
+    learning_rate: 0.001     # Learning rate inicial (será reduzido)
+
+    # Treinamento
+    batch_size: 64           # Batch size
+    epochs: 100              # Máximo de epochs (early stopping ativado)
+
+    # Early stopping
+    early_stopping_patience: 15    # Paciência para early stopping
+    reduce_lr_patience: 5          # Paciência para reduzir LR
+
+  output_dir: "models"
+
+# === TREINAMENTO ===
+training:
+  normalize_features: true
+  scaler_type: "robust"  # Robust é melhor para outliers
+
+  use_validation: true
+
+  metrics:
+    - accuracy
+    - auc
+    - precision
+    - recall
+
+  verbose: true
+
+# === LOGGING ===
+logging:
+  level: "INFO"
+  log_file: "training_deep_learning.log"
+  log_dir: "logs"
+
+# === MICROSTRUCTURE FEATURES ===
+# Configurações específicas para features de microestrutura
+microstructure:
+  # Order flow
+  order_flow_windows:
+    - 5
+    - 10
+    - 20
+
+  # Volume profile
+  volume_profile_periods:
+    - 10
+    - 20
+    - 50
+
+  # Price action
+  price_action_lookback:
+    - 5
+    - 10
+    - 20
+
+  # Volatility regimes
+  volatility_windows:
+    - 5
+    - 10
+    - 20
+    - 50
+
+  # Multi-timeframe (em candles de 15m)
+  multi_timeframe_windows:
+    - 4   # 1 hora
+    - 8   # 2 horas
+    - 12  # 3 horas
+    - 20  # 5 horas
