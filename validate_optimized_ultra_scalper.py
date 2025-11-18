@@ -126,28 +126,92 @@ def download_data(symbol: str, days: int, demo: bool = False) -> pd.DataFrame:
         print(f"✅ Generated {len(data)} simulated candles")
 
     else:
-        # Download real (requer ccxt)
+        # Download real data from Bybit (requires ccxt and internet access)
+        # NOTE: This may not work in sandboxed/restricted environments
         try:
             import ccxt
+            import time
 
-            exchange = ccxt.bybit()
-            since = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+            exchange = ccxt.bybit({
+                'options': {
+                    'defaultType': 'future',  # spot, future, or swap
+                }
+            })
 
-            ohlcv = exchange.fetch_ohlcv(
-                symbol,
-                timeframe=Config.TIMEFRAME,
-                since=since,
-                limit=days * 288  # 288 candles de 5min por dia
-            )
+            # Calculate total candles needed
+            candles_per_day = 288  # 5min candles (24h * 60min / 5min)
+            total_candles = days * candles_per_day
 
+            # Bybit API limit is 1000 candles per request
+            max_per_request = 1000
+
+            # Start from oldest date
+            start_date = datetime.now() - timedelta(days=days)
+            since = int(start_date.timestamp() * 1000)
+
+            all_candles = []
+            requests_made = 0
+
+            print(f"  Need {total_candles} candles, downloading in chunks of {max_per_request}...")
+
+            while len(all_candles) < total_candles:
+                try:
+                    # Calculate remaining candles needed
+                    remaining = total_candles - len(all_candles)
+                    limit = min(max_per_request, remaining)
+
+                    # Download chunk
+                    ohlcv = exchange.fetch_ohlcv(
+                        symbol,
+                        timeframe=Config.TIMEFRAME,
+                        since=since,
+                        limit=limit
+                    )
+
+                    if not ohlcv:
+                        break
+
+                    all_candles.extend(ohlcv)
+                    requests_made += 1
+
+                    # Update 'since' to last candle timestamp + 1
+                    since = ohlcv[-1][0] + (5 * 60 * 1000)  # +5 minutes in ms
+
+                    print(f"  Downloaded {len(all_candles)}/{total_candles} candles (request #{requests_made})")
+
+                    # If we got less than requested, we've reached the end
+                    if len(ohlcv) < limit:
+                        break
+
+                    # Rate limiting: small delay between requests
+                    if len(all_candles) < total_candles:
+                        time.sleep(0.2)
+
+                except Exception as e:
+                    print(f"⚠️  Error in request #{requests_made}: {str(e)[:200]}")
+                    if requests_made == 0:
+                        # If first request fails, show more details
+                        import traceback
+                        print(f"   Details: {traceback.format_exc()[:500]}")
+                    break
+
+            if not all_candles:
+                raise Exception("No data downloaded")
+
+            # Convert to DataFrame
             data = pd.DataFrame(
-                ohlcv,
+                all_candles,
                 columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
             )
             data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
             data.set_index('timestamp', inplace=True)
 
-            print(f"✅ Downloaded {len(data)} candles")
+            # Remove duplicates (just in case)
+            data = data[~data.index.duplicated(keep='first')]
+            data = data.sort_index()
+
+            print(f"✅ Downloaded {len(data)} candles in {requests_made} requests")
+            print(f"  Period: {data.index[0]} to {data.index[-1]}")
 
         except ImportError:
             print("⚠️  ccxt not installed. Install with: pip install ccxt")
@@ -421,12 +485,15 @@ def validate_with_all_methods(
         X_features = X_features.iloc[:, :expected_features]
 
     # Treinar modelo se ainda não treinado
-    # Verifica se tem métodos de predição OU classes_
-    needs_training = not (
-        hasattr(model, 'classes_') or
-        hasattr(model, 'predict_proba') or
-        (hasattr(model, 'predict') and callable(model.predict))
-    )
+    # Verifica se modelo está fitted (tem classes_ ou n_features_in_)
+    from sklearn.exceptions import NotFittedError
+    from sklearn.utils.validation import check_is_fitted
+
+    needs_training = False
+    try:
+        check_is_fitted(model)
+    except (NotFittedError, AttributeError):
+        needs_training = True
 
     if needs_training:
         print("⚠️  Model needs training...")
@@ -452,6 +519,10 @@ def validate_with_all_methods(
     y_test = y[train_size:]
     regimes_test = regimes[train_size:]
 
+    # Keep full X with OHLC for return calculations
+    X_full_train = X[:train_size]
+    X_full_test = X[train_size:]
+
     print(f"Train: {len(X_train)}, Test: {len(X_test)}")
 
     # ========================================================================
@@ -470,8 +541,8 @@ def validate_with_all_methods(
         preds_baseline = model.predict(X_test)
         probas_test = np.where(preds_baseline == 1, 0.7, 0.3)  # Dummy probas
 
-    # Simula retornos (NA PRÁTICA: calcular retornos reais dos trades)
-    returns_baseline = simulate_returns(preds_baseline, X_test, quality_factor=1.0)
+    # Calcula retornos REAIS baseados em OHLC + SL/TP
+    returns_baseline = simulate_returns(preds_baseline, X_full_test, quality_factor=1.0)
 
     metrics_baseline = calculate_metrics(returns_baseline, "Baseline")
     results['baseline'] = metrics_baseline
@@ -490,8 +561,8 @@ def validate_with_all_methods(
         # Usa dados de treino para otimizar
         probas_train = model.predict_proba(X_train)[:, 1] if hasattr(model, 'predict_proba') else np.random.uniform(0.5, 0.9, len(X_train))
 
-        # Gera retornos para CADA amostra (não só trades)
-        returns_train = simulate_returns_full(y_train.values, X_train, quality_factor=1.0)
+        # Gera retornos REAIS para CADA amostra (não só trades)
+        returns_train = simulate_returns_full(y_train.values, X_full_train, quality_factor=1.0)
 
         optimizer = ThresholdOptimizer(
             min_threshold=0.50,
@@ -550,8 +621,8 @@ def validate_with_all_methods(
         current_dd=0.0
     )
 
-    # Retornos filtrados (trades de melhor qualidade)
-    returns_filtered = simulate_returns(preds_filtered, X_test, quality_factor=1.3)
+    # Retornos filtrados REAIS (trades de melhor qualidade)
+    returns_filtered = simulate_returns(preds_filtered, X_full_test, quality_factor=1.3)
 
     metrics_filtered = calculate_metrics(returns_filtered, "With Filter")
     results['with_filter'] = metrics_filtered
@@ -580,9 +651,9 @@ def validate_with_all_methods(
             # Predições no fold
             probas_fold = model.predict_proba(X_features.iloc[test_idx])[:, 1] if hasattr(model, 'predict_proba') else np.random.uniform(0.5, 0.9, len(test_idx))
 
-            # Filtrar por threshold
+            # Filtrar por threshold e calcular retornos REAIS
             mask = probas_fold >= optimized_threshold
-            returns_fold = simulate_returns(mask.astype(int), X_features.iloc[test_idx], quality_factor=1.3)
+            returns_fold = simulate_returns(mask.astype(int), X.iloc[test_idx], quality_factor=1.3)
 
             if len(returns_fold) > 0:
                 metrics_fold = calculate_metrics(returns_fold, f"Fold {fold_idx+1}")
@@ -707,50 +778,145 @@ def validate_with_all_methods(
     return results
 
 
-def simulate_returns(signals: np.ndarray, X: pd.DataFrame, quality_factor: float = 1.0) -> np.ndarray:
+def calculate_real_returns(
+    signals: np.ndarray,
+    X: pd.DataFrame,
+    quality_factor: float = 1.0,
+    sl_pct: float = 0.015,      # Stop Loss 1.5%
+    tp_pct: float = 0.025,      # Take Profit 2.5%
+    max_hold_candles: int = 12,  # Max 1 hour (12 x 5min)
+    slippage_pct: float = 0.0005,  # 0.05% slippage
+    commission_pct: float = 0.0006  # 0.06% commission (0.03% x 2)
+) -> np.ndarray:
     """
-    Simula retornos dos trades (retorna apenas trades executados)
+    Calcula retornos REAIS baseado em preços de entrada/saída com SL/TP
 
     Args:
         signals: Array de sinais (0/1)
-        X: Features
-        quality_factor: Multiplicador de qualidade (>1 = melhores trades)
+        X: DataFrame com OHLC data (deve ter colunas 'close', 'high', 'low')
+        quality_factor: Multiplicador de qualidade (ajusta SL/TP)
+        sl_pct: Stop Loss percentage
+        tp_pct: Take Profit percentage
+        max_hold_candles: Máximo de candles para segurar posição
+        slippage_pct: Slippage na entrada
+        commission_pct: Comissão total (entrada + saída)
 
     Returns:
         Array de retornos (tamanho = número de trades)
     """
     trades = signals == 1
-    n_trades = np.sum(trades)
+    trade_indices = np.where(trades)[0]
+    n_trades = len(trade_indices)
 
     if n_trades == 0:
         return np.array([])
 
-    # Simula retornos baseado em features
-    # Na prática: calcular retornos reais baseado em entrada/saída
+    # Verificar se temos OHLC data
+    if not all(col in X.columns for col in ['close', 'high', 'low']):
+        # Fallback: usar método antigo se não houver OHLC
+        print("⚠️  No OHLC data available, using fallback calculation")
+        if 'momentum' in X.columns and 'atr_pct' in X.columns:
+            base_returns = X.loc[trades, 'momentum'].values * 0.5
+            volatility = X.loc[trades, 'atr_pct'].values
+            noise = np.array([np.random.normal(0, max(abs(v) * 0.5, 0.01)) for v in volatility])
+            return (base_returns + noise) * quality_factor
+        else:
+            return np.random.normal(0.02, 0.04, n_trades) * quality_factor
 
-    # Retorno médio correlacionado com momentum/volatilidade
-    if 'momentum' in X.columns and 'atr_pct' in X.columns:
-        base_returns = X.loc[trades, 'momentum'].values * 0.5  # Usa momentum
-        volatility = X.loc[trades, 'atr_pct'].values
+    # Ajustar SL/TP pelo quality_factor
+    # Quality > 1 = melhores trades = SL mais largo, TP mais próximo
+    adjusted_sl = sl_pct * (2.0 - quality_factor * 0.3)  # Menos SL para quality alto
+    adjusted_tp = tp_pct * quality_factor  # Mais TP para quality alto
 
-        # Gera noise elemento por elemento
-        noise = np.array([np.random.normal(0, max(abs(v) * 0.5, 0.01)) for v in volatility])
-        returns = (base_returns + noise) * quality_factor
-    else:
-        # Fallback: retornos aleatórios
-        returns = np.random.normal(0.02, 0.04, n_trades) * quality_factor
+    returns = []
 
-    return returns
+    for trade_idx in trade_indices:
+        # Entrada no close do candle de sinal
+        entry_price = X.iloc[trade_idx]['close']
+
+        # Aplicar slippage na entrada (preço pior)
+        entry_price = entry_price * (1 + slippage_pct)
+
+        # Calcular níveis de SL e TP
+        sl_price = entry_price * (1 - adjusted_sl)
+        tp_price = entry_price * (1 + adjusted_tp)
+
+        # Simular candles subsequentes até encontrar saída
+        exit_price = None
+        exit_reason = None
+
+        for i in range(1, max_hold_candles + 1):
+            candle_idx = trade_idx + i
+
+            # Se passou do fim dos dados, sair no último preço
+            if candle_idx >= len(X):
+                exit_price = X.iloc[-1]['close']
+                exit_reason = 'end_of_data'
+                break
+
+            candle_high = X.iloc[candle_idx]['high']
+            candle_low = X.iloc[candle_idx]['low']
+            candle_close = X.iloc[candle_idx]['close']
+
+            # Verificar se SL foi atingido
+            if candle_low <= sl_price:
+                exit_price = sl_price
+                exit_reason = 'sl'
+                break
+
+            # Verificar se TP foi atingido
+            if candle_high >= tp_price:
+                exit_price = tp_price
+                exit_reason = 'tp'
+                break
+
+            # Se último candle permitido, sair no close
+            if i == max_hold_candles:
+                exit_price = candle_close
+                exit_reason = 'timeout'
+                break
+
+        # Se não encontrou saída (fim dos dados), usar último close
+        if exit_price is None:
+            exit_price = X.iloc[min(trade_idx + max_hold_candles, len(X) - 1)]['close']
+            exit_reason = 'timeout'
+
+        # Calcular retorno bruto
+        ret = (exit_price - entry_price) / entry_price
+
+        # Aplicar slippage na saída (preço pior)
+        ret = ret - slippage_pct
+
+        # Aplicar comissão
+        ret = ret - commission_pct
+
+        returns.append(ret)
+
+    return np.array(returns)
 
 
-def simulate_returns_full(signals: np.ndarray, X: pd.DataFrame, quality_factor: float = 1.0) -> np.ndarray:
+def calculate_real_returns_full(
+    signals: np.ndarray,
+    X: pd.DataFrame,
+    quality_factor: float = 1.0,
+    sl_pct: float = 0.015,
+    tp_pct: float = 0.025,
+    max_hold_candles: int = 12,
+    slippage_pct: float = 0.0005,
+    commission_pct: float = 0.0006
+) -> np.ndarray:
     """
-    Simula retornos para TODAS amostras (usado pelo optimizer)
+    Calcula retornos REAIS para TODAS amostras (usado pelo optimizer)
 
     Args:
         signals: Array de sinais (0/1)
-        X: Features
-        quality_factor: Multiplicador de qualidade (>1 = melhores trades)
+        X: DataFrame com OHLC data
+        quality_factor: Multiplicador de qualidade
+        sl_pct: Stop Loss percentage
+        tp_pct: Take Profit percentage
+        max_hold_candles: Máximo de candles para segurar posição
+        slippage_pct: Slippage
+        commission_pct: Comissão
 
     Returns:
         Array de retornos (tamanho = tamanho de signals, 0 onde não há trade)
@@ -758,29 +924,30 @@ def simulate_returns_full(signals: np.ndarray, X: pd.DataFrame, quality_factor: 
     n_samples = len(signals)
     full_returns = np.zeros(n_samples)
 
-    trades = signals == 1
+    # Calcular retornos apenas para trades
+    trade_returns = calculate_real_returns(
+        signals, X, quality_factor, sl_pct, tp_pct,
+        max_hold_candles, slippage_pct, commission_pct
+    )
 
-    if np.sum(trades) == 0:
-        return full_returns
-
-    # Gera retornos apenas para trades
-    if 'momentum' in X.columns and 'atr_pct' in X.columns:
-        momentum_values = X['momentum'].values
-        volatility_values = X['atr_pct'].values
-
-        for i in range(n_samples):
-            if trades[i]:
-                base_return = momentum_values[i] * 0.5
-                volatility = volatility_values[i]
-                noise = np.random.normal(0, max(abs(volatility) * 0.5, 0.01))
-                full_returns[i] = (base_return + noise) * quality_factor
-    else:
-        # Fallback
-        for i in range(n_samples):
-            if trades[i]:
-                full_returns[i] = np.random.normal(0.02, 0.04) * quality_factor
+    # Atribuir aos índices corretos
+    trade_indices = np.where(signals == 1)[0]
+    for i, idx in enumerate(trade_indices):
+        if i < len(trade_returns):
+            full_returns[idx] = trade_returns[i]
 
     return full_returns
+
+
+# Backward compatibility aliases
+def simulate_returns(signals: np.ndarray, X: pd.DataFrame, quality_factor: float = 1.0) -> np.ndarray:
+    """Alias for backward compatibility - now uses real return calculation"""
+    return calculate_real_returns(signals, X, quality_factor)
+
+
+def simulate_returns_full(signals: np.ndarray, X: pd.DataFrame, quality_factor: float = 1.0) -> np.ndarray:
+    """Alias for backward compatibility - now uses real return calculation"""
+    return calculate_real_returns_full(signals, X, quality_factor)
 
 
 def calculate_metrics(returns: np.ndarray, label: str = "") -> Dict:
