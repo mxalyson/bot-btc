@@ -28,6 +28,9 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import robust data downloader
+from download_market_data import download_market_data
+
 # Importar módulos de validação
 from validation.confidence_filter import ConfidenceFilter
 from validation.optimize_confidence_threshold import ThresholdOptimizer
@@ -85,7 +88,7 @@ class Config:
 
 def download_data(symbol: str, days: int, demo: bool = False) -> pd.DataFrame:
     """
-    Download dados de mercado
+    Download dados de mercado usando downloader robusto
 
     Args:
         symbol: Par de trading (ex: 'BTCUSDT')
@@ -95,134 +98,14 @@ def download_data(symbol: str, days: int, demo: bool = False) -> pd.DataFrame:
     Returns:
         DataFrame com OHLCV
     """
-    print(f"\n📥 Downloading {symbol} data ({days} days)...")
-
-    if demo:
-        # Gera dados simulados
-        n_candles = days * 24 * 12  # 5min candles
-        dates = pd.date_range(
-            end=datetime.now(),
-            periods=n_candles,
-            freq='5min'
-        )
-
-        # Simula preços com tendência + ruído
-        base_price = 50000
-        trend = np.linspace(0, 5000, n_candles)
-        noise = np.random.normal(0, 1000, n_candles).cumsum()
-        close = base_price + trend + noise
-
-        # Simula OHLCV
-        data = pd.DataFrame({
-            'timestamp': dates,
-            'open': close * (1 + np.random.uniform(-0.002, 0.002, n_candles)),
-            'high': close * (1 + np.random.uniform(0, 0.005, n_candles)),
-            'low': close * (1 - np.random.uniform(0, 0.005, n_candles)),
-            'close': close,
-            'volume': np.random.uniform(100, 1000, n_candles)
-        })
-
-        data.set_index('timestamp', inplace=True)
-        print(f"✅ Generated {len(data)} simulated candles")
-
-    else:
-        # Download real data from Bybit (requires ccxt and internet access)
-        # NOTE: This may not work in sandboxed/restricted environments
-        try:
-            import ccxt
-            import time
-
-            exchange = ccxt.bybit({
-                'options': {
-                    'defaultType': 'future',  # spot, future, or swap
-                }
-            })
-
-            # Calculate total candles needed
-            candles_per_day = 288  # 5min candles (24h * 60min / 5min)
-            total_candles = days * candles_per_day
-
-            # Bybit API limit is 1000 candles per request
-            max_per_request = 1000
-
-            # Start from oldest date
-            start_date = datetime.now() - timedelta(days=days)
-            since = int(start_date.timestamp() * 1000)
-
-            all_candles = []
-            requests_made = 0
-
-            print(f"  Need {total_candles} candles, downloading in chunks of {max_per_request}...")
-
-            while len(all_candles) < total_candles:
-                try:
-                    # Calculate remaining candles needed
-                    remaining = total_candles - len(all_candles)
-                    limit = min(max_per_request, remaining)
-
-                    # Download chunk
-                    ohlcv = exchange.fetch_ohlcv(
-                        symbol,
-                        timeframe=Config.TIMEFRAME,
-                        since=since,
-                        limit=limit
-                    )
-
-                    if not ohlcv:
-                        break
-
-                    all_candles.extend(ohlcv)
-                    requests_made += 1
-
-                    # Update 'since' to last candle timestamp + 1
-                    since = ohlcv[-1][0] + (5 * 60 * 1000)  # +5 minutes in ms
-
-                    print(f"  Downloaded {len(all_candles)}/{total_candles} candles (request #{requests_made})")
-
-                    # If we got less than requested, we've reached the end
-                    if len(ohlcv) < limit:
-                        break
-
-                    # Rate limiting: small delay between requests
-                    if len(all_candles) < total_candles:
-                        time.sleep(0.2)
-
-                except Exception as e:
-                    print(f"⚠️  Error in request #{requests_made}: {str(e)[:200]}")
-                    if requests_made == 0:
-                        # If first request fails, show more details
-                        import traceback
-                        print(f"   Details: {traceback.format_exc()[:500]}")
-                    break
-
-            if not all_candles:
-                raise Exception("No data downloaded")
-
-            # Convert to DataFrame
-            data = pd.DataFrame(
-                all_candles,
-                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
-            )
-            data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
-            data.set_index('timestamp', inplace=True)
-
-            # Remove duplicates (just in case)
-            data = data[~data.index.duplicated(keep='first')]
-            data = data.sort_index()
-
-            print(f"✅ Downloaded {len(data)} candles in {requests_made} requests")
-            print(f"  Period: {data.index[0]} to {data.index[-1]}")
-
-        except ImportError:
-            print("⚠️  ccxt not installed. Install with: pip install ccxt")
-            print("Using simulated data instead...")
-            return download_data(symbol, days, demo=True)
-        except Exception as e:
-            print(f"⚠️  Error downloading data: {e}")
-            print("Using simulated data instead...")
-            return download_data(symbol, days, demo=True)
-
-    return data
+    # Use o novo downloader robusto que tenta Binance -> Bybit -> Simulado
+    return download_market_data(
+        symbol=symbol,
+        days=days,
+        timeframe=Config.TIMEFRAME,
+        demo=demo,
+        force_download=False
+    )
 
 
 def build_features(data: pd.DataFrame) -> pd.DataFrame:
