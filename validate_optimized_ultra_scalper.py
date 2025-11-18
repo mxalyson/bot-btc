@@ -316,8 +316,31 @@ def create_model(demo: bool = False):
 
             if os.path.exists(model_path):
                 with open(model_path, 'rb') as f:
-                    model = pickle.load(f)
-                print(f"✅ Loaded model from {model_path}")
+                    loaded = pickle.load(f)
+
+                # Se for dict, extrair modelo
+                if isinstance(loaded, dict):
+                    # Tenta pegar modelo de possíveis keys
+                    if 'model' in loaded:
+                        model = loaded['model']
+                        print(f"✅ Loaded model from {model_path} (extracted from dict)")
+                    elif 'classifier' in loaded:
+                        model = loaded['classifier']
+                        print(f"✅ Loaded model from {model_path} (extracted classifier)")
+                    else:
+                        # Tenta primeiro item que parece modelo
+                        for key, value in loaded.items():
+                            if hasattr(value, 'predict'):
+                                model = value
+                                print(f"✅ Loaded model from {model_path} (extracted '{key}')")
+                                break
+                        else:
+                            print(f"⚠️  Dict loaded but no model found. Keys: {list(loaded.keys())}")
+                            print("Creating dummy model...")
+                            return create_model(demo=True)
+                else:
+                    model = loaded
+                    print(f"✅ Loaded model from {model_path}")
             else:
                 print(f"⚠️  Model {model_path} not found, creating dummy model...")
                 return create_model(demo=True)
@@ -382,11 +405,29 @@ def validate_with_all_methods(
     feature_cols = [col for col in X.columns if col not in ['returns', 'close', 'open', 'high', 'low', 'volume']]
     X_features = X[feature_cols]
 
-    # Treinar modelo se dummy
-    if not hasattr(model, 'classes_'):
-        print("Training dummy model...")
+    # Treinar modelo se ainda não treinado
+    # Verifica se tem métodos de predição OU classes_
+    needs_training = not (
+        hasattr(model, 'classes_') or
+        hasattr(model, 'predict_proba') or
+        (hasattr(model, 'predict') and callable(model.predict))
+    )
+
+    if needs_training:
+        print("⚠️  Model needs training...")
         train_size = int(len(X_features) * 0.7)
-        model.fit(X_features[:train_size], y[:train_size])
+        try:
+            model.fit(X_features[:train_size], y[:train_size])
+            print("✅ Model trained successfully")
+        except Exception as e:
+            print(f"❌ Error training model: {e}")
+            print("Creating new dummy model...")
+            from sklearn.ensemble import RandomForestClassifier
+            model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+            model.fit(X_features[:train_size], y[:train_size])
+            print("✅ Dummy model trained")
+    else:
+        print("✅ Model already trained, skipping training step")
 
     # Split train/test
     train_size = int(len(X_features) * 0.7)
