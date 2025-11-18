@@ -1,1 +1,29 @@
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+
+# IDEs
+.DS_Store
+.vscode/
+.idea/
+
+# Models
+*.pkl
+*.h5
+*.model
+
+# Virtual Environments
+venv/
+env/
+.venv/

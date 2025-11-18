@@ -19,7 +19,11 @@ from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import seaborn as sns
 from dataclasses import dataclass, asdict
-from confidence_filter import ConfidenceFilter
+
+try:
+    from .confidence_filter import ConfidenceFilter
+except ImportError:
+    from confidence_filter import ConfidenceFilter
 
 
 @dataclass
