@@ -1,0 +1,257 @@
+# ============================================================================
+# ULTRA SCALPER - V5 ULTRA (ROI Maximization)
+# ============================================================================
+# Objetivo: 50-55% Win Rate + ROI +100-130%
+#
+# Estratégia V5 ULTRA:
+# Baseado em resultados FINAL (3 bugs corrigidos):
+#   ROI: +89.55%, WR: 50.5%, Sharpe: 3.71
+#
+# Performance por Regime (FINAL):
+#   * high_vol_bear: 63.2% WR, +59.28% ROI → EXCELENTE! (AUMENTAR SIZE)
+#   * medium_bear: 55.4% WR, +30.47% ROI → BOM (AUMENTAR SIZE)
+#   * high_vol_bull: 46.8% WR, +22.96% ROI → OK (AUMENTAR SIZE)
+#   * low_vol_bear: 42.2% WR, +7.54% ROI → FRACO (BLOQUEAR!)
+#   * medium_bull: 37.8% WR, +7.32% ROI → BLOQUEADO
+#   * low_vol_bull: 29.4% WR, -0.36% ROI → NEGATIVO! (BLOQUEADO)
+#
+# 🎯 OTIMIZAÇÕES V5:
+#   1. BLOQUEAR low_vol_bear (42.2% WR fraco)
+#   2. AUMENTAR position sizing nos melhores regimes:
+#      - high_vol_bear: 1.3x → 2.0x (63.2% WR!)
+#      - medium_bear: 1.5x → 2.0x (55.4% WR!)
+#      - high_vol_bull: 0.8x → 1.3x (46.8% WR)
+#   3. REDUZIR thresholds nos melhores (pegar mais trades):
+#      - high_vol_bear: 50% → 45%
+#      - medium_bear: 40% → 38%
+#
+# 📊 PROJEÇÃO V5:
+#   - ROI: +110-140% (vs +89% FINAL)
+#   - Win Rate: 52-56% (vs 50.5% FINAL)
+#   - Sharpe: 4.0-4.5 (vs 3.71 FINAL)
+#   - Trades: 420-460 (vs 444 FINAL)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME (PROGRESSIVE CONFIDENCE)
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Regimes otimizados para ROI máximo (V5)
+  regimes:
+    # 🔥 MELHOR REGIME: 63.2% WR, +59% ROI
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.45      # ⬇️ REDUZIDO de 0.50 → 0.45 (pegar mais trades!)
+      position_multiplier: 2.0   # ⬆️ AUMENTADO de 1.3 → 2.0 (AGRESSIVO!)
+      stop_atr_mult: 1.5
+      trailing_stop: false
+
+    # 🟢 SEGUNDO MELHOR: 55.4% WR, +30% ROI
+    medium_bear:
+      enabled: true
+      min_confidence: 0.38      # ⬇️ REDUZIDO de 0.40 → 0.38
+      position_multiplier: 2.0   # ⬆️ AUMENTADO de 1.5 → 2.0
+      stop_atr_mult: 1.2
+      trailing_stop: false
+
+    # 🟡 TERCEIRO: 46.8% WR, +22% ROI
+    high_vol_bull:
+      enabled: true
+      min_confidence: 0.58      # ⬇️ REDUZIDO de 0.60 → 0.58
+      position_multiplier: 1.3   # ⬆️ AUMENTADO de 0.8 → 1.3
+      stop_atr_mult: 1.5
+      trailing_stop: false
+
+    # 🚫 BLOQUEADOS
+    low_vol_bear:
+      enabled: false            # 🚫 BLOQUEADO! (42.2% WR fraco, apenas +7.54% ROI)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    medium_bull:
+      enabled: false            # 🔥 BLOQUEADO! (40.5% WR inaceitável)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    low_vol_bull:
+      enabled: false            # 🔥 BLOQUEADO! (33.1% WR inaceitável)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+# ----------------------------------------------------------------------------
+# FILTRO TEMPORAL (DESATIVADO)
+# ----------------------------------------------------------------------------
+temporal_filter:
+  enabled: false
+  block_weekdays:
+    enabled: false
+    blocked_days: []
+  block_hours:
+    enabled: false
+    blocked_hours_utc: []
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA (HÍBRIDA)
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Multiplicadores por nível de confiança
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.2   # Recompensa alta confiança
+      description: "Altíssima confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 1.0   # Padrão para alta confiança
+      description: "Alta confiança"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.6   # 🔥 Reduzido de 0.7 → 0.6
+      description: "Média confiança (só em regimes fortes)"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.3   # 🔥 Reduzido de 0.5 → 0.3
+      description: "Baixa confiança (quase bloqueado)"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING HÍBRIDO
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "dynamic"
+  base_size_usd: 100.0
+  max_size_usd: 600.0  # 🔥 Reduzido de 1000 → 600 (mais conservador)
+
+  # Fórmula: base_size * regime_mult * confidence_mult
+  # Exemplo:
+  #   - medium_bear (1.5x) + ultra_high conf (1.2x) = 180 USD
+  #   - high_vol_bull (0.8x) + high conf (1.0x) = 80 USD
+
+# ----------------------------------------------------------------------------
+# STOP LOSS DINÂMICO
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 2.0
+
+# ----------------------------------------------------------------------------
+# TRAILING STOP (DESATIVADO)
+# ----------------------------------------------------------------------------
+trailing_stop:
+  enabled: false
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT HÍBRIDO
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"
+
+  # TPs balanceados (não muito ambiciosos)
+  regimes:
+    medium_bear:
+      tp_atr_mult: 2.0      # Risk-reward 1:2.5
+      risk_reward: 2.5
+
+    high_vol_bear:
+      tp_atr_mult: 2.2      # Risk-reward 1:2.5
+      risk_reward: 2.5
+
+    low_vol_bear:
+      tp_atr_mult: 1.8      # Risk-reward 1:2.0
+      risk_reward: 2.0
+
+    high_vol_bull:
+      tp_atr_mult: 1.8      # Risk-reward 1:2.0
+      risk_reward: 2.0
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.2
+      risk_reward: 1.2
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20
+  trend_window: 50
+  vol_quantiles:
+    low: 0.33
+    high: 0.67
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT (HÍBRIDO)
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 40        # 🔥 Reduzido de 60 → 40
+  max_concurrent_trades: 2    # 🔥 Reduzido de 3 → 2
+  max_daily_loss_pct: 3.0     # 🔥 Reduzido de 5.0 → 3.0
+  max_drawdown_pct: 8.0       # 🔥 Reduzido de 10.0 → 8.0
+
+  # Pausa automática mais rigorosa
+  performance_check:
+    enabled: true
+    window_trades: 15         # 🔥 Reduzido de 20 → 15
+    min_win_rate: 0.50        # 🔥 Aumentado de 0.45 → 0.50
+    cooldown_minutes: 90      # 🔥 Aumentado de 60 → 90
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.40  # medium_bear
+    - 0.50  # high_vol_bear
+    - 0.60  # high_vol_bull
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true
+  log_confidence_filtering: true  # 🆕 Log quando trades bloqueados por confiança baixa
