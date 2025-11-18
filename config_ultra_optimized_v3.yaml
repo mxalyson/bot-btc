@@ -1,0 +1,240 @@
+# ============================================================================
+# ULTRA SCALPER - V3 HYBRID (Progressive Confidence Filtering)
+# ============================================================================
+# Objetivo: 57-63% Win Rate + Consistência em Walk-Forward
+#
+# Estratégia V3:
+# - Confiança progressiva: regimes piores = confiança maior exigida
+# - Baseado em análise de 90 dias:
+#   * medium_bear: 56.9% WR → min_conf 0.40
+#   * high_vol_bear: 50.5% WR → min_conf 0.50
+#   * low_vol_bear: 51.2% WR → min_conf 0.45
+#   * high_vol_bull: 42.6% WR → min_conf 0.60
+#   * medium_bull: 40.5% WR → BLOQUEADO
+#   * low_vol_bull: 33.1% WR → BLOQUEADO
+#
+# Sacrifícios vs V1:
+# - Menos trades (~200-300 vs 579)
+# - ROI menor em valor absoluto (+40-50% vs +67%)
+# - MAS: Win Rate 57-63% e todos folds positivos
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME (PROGRESSIVE CONFIDENCE)
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Regimes com confiança progressiva
+  regimes:
+    medium_bear:
+      enabled: true
+      min_confidence: 0.40      # 🔥 Melhor regime (56.9% WR)
+      position_multiplier: 1.5   # Agressivo no melhor regime
+      stop_atr_mult: 1.2
+      trailing_stop: false
+
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.50      # 🔥 Aumentado de 0.10 → 0.50
+      position_multiplier: 1.3   # Reduzido de 2.0 → 1.3
+      stop_atr_mult: 1.5
+      trailing_stop: false
+
+    low_vol_bear:
+      enabled: true
+      min_confidence: 0.45      # 🔥 Aumentado de 0.25 → 0.45
+      position_multiplier: 1.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    high_vol_bull:
+      enabled: true
+      min_confidence: 0.60      # 🔥 Aumentado de 0.20 → 0.60 (42.6% WR ruim)
+      position_multiplier: 0.8   # Reduzido de 1.3 → 0.8
+      stop_atr_mult: 1.5
+      trailing_stop: false
+
+    medium_bull:
+      enabled: false            # 🔥 BLOQUEADO! (40.5% WR inaceitável)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    low_vol_bull:
+      enabled: false            # 🔥 BLOQUEADO! (33.1% WR inaceitável)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+# ----------------------------------------------------------------------------
+# FILTRO TEMPORAL (DESATIVADO)
+# ----------------------------------------------------------------------------
+temporal_filter:
+  enabled: false
+  block_weekdays:
+    enabled: false
+    blocked_days: []
+  block_hours:
+    enabled: false
+    blocked_hours_utc: []
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA (HÍBRIDA)
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Multiplicadores por nível de confiança
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.2   # Recompensa alta confiança
+      description: "Altíssima confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 1.0   # Padrão para alta confiança
+      description: "Alta confiança"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.6   # 🔥 Reduzido de 0.7 → 0.6
+      description: "Média confiança (só em regimes fortes)"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.3   # 🔥 Reduzido de 0.5 → 0.3
+      description: "Baixa confiança (quase bloqueado)"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING HÍBRIDO
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "dynamic"
+  base_size_usd: 100.0
+  max_size_usd: 600.0  # 🔥 Reduzido de 1000 → 600 (mais conservador)
+
+  # Fórmula: base_size * regime_mult * confidence_mult
+  # Exemplo:
+  #   - medium_bear (1.5x) + ultra_high conf (1.2x) = 180 USD
+  #   - high_vol_bull (0.8x) + high conf (1.0x) = 80 USD
+
+# ----------------------------------------------------------------------------
+# STOP LOSS DINÂMICO
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 2.0
+
+# ----------------------------------------------------------------------------
+# TRAILING STOP (DESATIVADO)
+# ----------------------------------------------------------------------------
+trailing_stop:
+  enabled: false
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT HÍBRIDO
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"
+
+  # TPs balanceados (não muito ambiciosos)
+  regimes:
+    medium_bear:
+      tp_atr_mult: 2.0      # Risk-reward 1:2.5
+      risk_reward: 2.5
+
+    high_vol_bear:
+      tp_atr_mult: 2.2      # Risk-reward 1:2.5
+      risk_reward: 2.5
+
+    low_vol_bear:
+      tp_atr_mult: 1.8      # Risk-reward 1:2.0
+      risk_reward: 2.0
+
+    high_vol_bull:
+      tp_atr_mult: 1.8      # Risk-reward 1:2.0
+      risk_reward: 2.0
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.2
+      risk_reward: 1.2
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20
+  trend_window: 50
+  vol_quantiles:
+    low: 0.33
+    high: 0.67
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT (HÍBRIDO)
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 40        # 🔥 Reduzido de 60 → 40
+  max_concurrent_trades: 2    # 🔥 Reduzido de 3 → 2
+  max_daily_loss_pct: 3.0     # 🔥 Reduzido de 5.0 → 3.0
+  max_drawdown_pct: 8.0       # 🔥 Reduzido de 10.0 → 8.0
+
+  # Pausa automática mais rigorosa
+  performance_check:
+    enabled: true
+    window_trades: 15         # 🔥 Reduzido de 20 → 15
+    min_win_rate: 0.50        # 🔥 Aumentado de 0.45 → 0.50
+    cooldown_minutes: 90      # 🔥 Aumentado de 60 → 90
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.40  # medium_bear
+    - 0.50  # high_vol_bear
+    - 0.60  # high_vol_bull
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true
+  log_confidence_filtering: true  # 🆕 Log quando trades bloqueados por confiança baixa

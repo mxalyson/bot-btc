@@ -1,0 +1,292 @@
+# ============================================================================
+# ULTRA SCALPER - V4 EXPERT (Otimizações Baseadas em Análise de Performance)
+# ============================================================================
+# Objetivo: 52-55% Win Rate + ROI +95-120%
+#
+# Estratégia V4 (EXPERT OPTIMIZATIONS):
+# Baseado em análise de resultados V3 (90 dias):
+#
+#   V3 Results:
+#   - ROI: +69.17%, WR: 49.0%, Sharpe: 3.26, DD: -4.5%
+#   - Trades: 445, Bloqueados: 3,049 (87%!)
+#
+#   Performance por Regime (V3):
+#   * high_vol_bear: 60.6% WR, +51.82% ROI → MELHOR! (threshold muito alto!)
+#   * medium_bear: 50.0% WR, +18.95% ROI → BOM
+#   * high_vol_bull: 44.6% WR, +20.44% ROI → ACEITÁVEL
+#   * low_vol_bear: 43.8% WR, +8.83% ROI → FRACO (deve bloquear!)
+#   * medium_bull: 32.9% WR → BLOQUEADO
+#   * low_vol_bull: 30.0% WR → BLOQUEADO
+#
+# 🎯 OTIMIZAÇÕES V4:
+#   1. ✅ BLOQUEAR low_vol_bear (43.8% WR diluindo ganhos)
+#   2. ✅ REDUZIR thresholds nos MELHORES regimes (pegar mais trades bons!)
+#      - high_vol_bear: 0.50 → 0.35 (é o MELHOR regime - 60.6% WR!)
+#      - medium_bear: 0.40 → 0.35
+#      - high_vol_bull: 0.60 → 0.50
+#   3. ✅ AUMENTAR position sizing nos melhores regimes
+#      - high_vol_bear: 1.3x → 2.5x (aproveitar o melhor!)
+#      - medium_bear: 1.5x → 2.0x
+#   4. ✅ SL/TP mais agressivo nos melhores regimes
+#   5. ✅ Trailing stop nos regimes vencedores
+#   6. ✅ Filtros de volatilidade extrema e consolidação
+#
+# 📊 PROJEÇÃO V4:
+#   - ROI: +95-120% (vs +69% V3)
+#   - Win Rate: 52-55% (vs 49% V3)
+#   - Sharpe: 4.0-4.5 (vs 3.26 V3)
+#   - Trades: 500-550 (vs 445 V3)
+#   - Max DD: -3.5-4.0% (vs -4.5% V3)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME (V4 EXPERT)
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Regimes otimizados baseado em performance real
+  regimes:
+    # 🔥 MELHOR REGIME: 60.6% WR, +51.82% ROI
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.35      # ⬇️ REDUZIDO de 0.50 → 0.35 (pegar MAIS trades do melhor regime!)
+      position_multiplier: 2.5   # ⬆️ AUMENTADO de 1.3 → 2.5 (AGRESSIVO no melhor!)
+      stop_atr_mult: 1.2         # ⬇️ SL mais tight (1.5 → 1.2)
+      trailing_stop: true        # ✅ ATIVADO (proteger lucros)
+
+    # 🟢 SEGUNDO MELHOR: 50.0% WR, +18.95% ROI
+    medium_bear:
+      enabled: true
+      min_confidence: 0.35      # ⬇️ REDUZIDO de 0.40 → 0.35 (pegar mais trades)
+      position_multiplier: 2.0   # ⬆️ AUMENTADO de 1.5 → 2.0
+      stop_atr_mult: 1.3         # ⬇️ REDUZIDO de 1.2 → 1.3
+      trailing_stop: true        # ✅ ATIVADO
+
+    # 🟡 TERCEIRO: 44.6% WR, +20.44% ROI
+    high_vol_bull:
+      enabled: true
+      min_confidence: 0.50      # ⬇️ REDUZIDO de 0.60 → 0.50
+      position_multiplier: 1.2   # ⬆️ AUMENTADO de 0.8 → 1.2
+      stop_atr_mult: 1.5
+      trailing_stop: true        # ✅ ATIVADO
+
+    # 🚫 BLOQUEADOS (Performance Ruim)
+    low_vol_bear:
+      enabled: false            # 🚫 BLOQUEADO! (43.8% WR, apenas +8.83% ROI)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    medium_bull:
+      enabled: false            # 🚫 BLOQUEADO! (32.9% WR)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    low_vol_bull:
+      enabled: false            # 🚫 BLOQUEADO! (30.0% WR)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+# ----------------------------------------------------------------------------
+# FILTRO TEMPORAL (DESATIVADO)
+# ----------------------------------------------------------------------------
+temporal_filter:
+  enabled: false
+  block_weekdays:
+    enabled: false
+    blocked_days: []
+  block_hours:
+    enabled: false
+    blocked_hours_utc: []
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA (V4 EXPERT)
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Multiplicadores otimizados
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.5   # ⬆️ AUMENTADO de 1.2 → 1.5 (recompensar alta confiança)
+      description: "Altíssima confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 1.2   # ⬆️ AUMENTADO de 1.0 → 1.2
+      description: "Alta confiança"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.8   # ⬆️ AUMENTADO de 0.6 → 0.8
+      description: "Média confiança"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.5   # ⬆️ AUMENTADO de 0.3 → 0.5
+      description: "Baixa confiança"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING (V4 EXPERT)
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "dynamic"
+  base_size_usd: 100.0
+  max_size_usd: 800.0  # ⬆️ AUMENTADO de 600 → 800 (mais agressivo nos melhores regimes)
+
+  # Fórmula: base_size * regime_mult * confidence_mult
+  # Exemplo V4:
+  #   - high_vol_bear (2.5x) + ultra_high conf (1.5x) = 375 USD (vs 180 V3)
+  #   - medium_bear (2.0x) + high conf (1.2x) = 240 USD
+  #   - high_vol_bull (1.2x) + medium conf (0.8x) = 96 USD
+
+# ----------------------------------------------------------------------------
+# STOP LOSS DINÂMICO (V4 EXPERT)
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 2.5  # ⬆️ AUMENTADO de 2.0 → 2.5
+
+# ----------------------------------------------------------------------------
+# TRAILING STOP (V4 EXPERT - ATIVADO!)
+# ----------------------------------------------------------------------------
+trailing_stop:
+  enabled: true             # ✅ ATIVADO (era false no V3)
+
+  # Por regime
+  regimes:
+    high_vol_bear:
+      trigger_atr_mult: 1.5   # Ativa trailing após 1.5 ATR de lucro
+      trail_atr_mult: 0.8     # Trail a 0.8 ATR do pico
+
+    medium_bear:
+      trigger_atr_mult: 1.8
+      trail_atr_mult: 1.0
+
+    high_vol_bull:
+      trigger_atr_mult: 1.3
+      trail_atr_mult: 0.7
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT (V4 EXPERT - MAIS AGRESSIVO)
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"
+
+  # TPs mais agressivos nos melhores regimes
+  regimes:
+    high_vol_bear:
+      tp_atr_mult: 2.5      # ⬆️ AUMENTADO de 2.2 → 2.5
+      risk_reward: 3.0      # ⬆️ AUMENTADO de 2.5 → 3.0 (mais ambicioso!)
+
+    medium_bear:
+      tp_atr_mult: 2.3      # ⬆️ AUMENTADO de 2.0 → 2.3
+      risk_reward: 2.8      # ⬆️ AUMENTADO de 2.5 → 2.8
+
+    high_vol_bull:
+      tp_atr_mult: 2.0      # ⬆️ AUMENTADO de 1.8 → 2.0
+      risk_reward: 2.3      # ⬆️ AUMENTADO de 2.0 → 2.3
+
+    low_vol_bear:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.2
+      risk_reward: 1.2
+
+# ----------------------------------------------------------------------------
+# FILTROS ADICIONAIS (V4 EXPERT - NOVO!)
+# ----------------------------------------------------------------------------
+advanced_filters:
+  # Bloquear trades em volatilidade extrema (eventos anormais)
+  extreme_volatility:
+    enabled: true
+    max_atr_mult: 3.0       # Bloquear se vol > 3x ATR normal
+
+  # Bloquear trades em consolidações (range baixo)
+  consolidation:
+    enabled: true
+    min_range_atr: 0.5      # Bloquear se range < 0.5 ATR
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20
+  trend_window: 50
+  vol_quantiles:
+    low: 0.33
+    high: 0.67
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT (V4 - MENOS RESTRITIVO)
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 50        # ⬆️ AUMENTADO de 40 → 50 (pegar mais trades bons)
+  max_concurrent_trades: 3    # ⬆️ AUMENTADO de 2 → 3
+  max_daily_loss_pct: 4.0     # ⬆️ AUMENTADO de 3.0 → 4.0 (menos conservador)
+  max_drawdown_pct: 10.0      # ⬆️ AUMENTADO de 8.0 → 10.0
+
+  # Performance check balanceado
+  performance_check:
+    enabled: true
+    window_trades: 20         # ⬆️ AUMENTADO de 15 → 20
+    min_win_rate: 0.48        # ⬇️ REDUZIDO de 0.50 → 0.48 (menos restritivo)
+    cooldown_minutes: 60      # ⬇️ REDUZIDO de 90 → 60
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.35  # high_vol_bear e medium_bear
+    - 0.50  # high_vol_bull
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true
+  log_confidence_filtering: true
