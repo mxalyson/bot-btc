@@ -1,0 +1,281 @@
+# ============================================================================
+# ULTRA SCALPER - V3.5 REFINED (Melhorias Conservadoras sobre V3)
+# ============================================================================
+# Objetivo: +75-85% ROI, 50-52% WR, 3.5+ Sharpe
+#
+# Estratégia V3.5 REFINED:
+# Baseado em análise V3 (90 dias: 49% WR, +69% ROI, 3.26 Sharpe)
+#
+# Performance por Regime (V3):
+#   * high_vol_bear: 60.6% WR, +51.82% ROI → EXCELENTE!
+#   * medium_bear: 50.0% WR, +18.95% ROI → BOM
+#   * high_vol_bull: 44.6% WR, +20.44% ROI → ACEITÁVEL
+#   * low_vol_bear: 43.8% WR, +8.83% ROI → POSITIVO (manter!)
+#   * medium_bull: 32.9% WR → BLOQUEADO
+#   * low_vol_bull: 30.0% WR → BLOQUEADO
+#
+# 🎯 MELHORIAS V3.5 (CONSERVADORAS):
+#   1. ✅ Reduzir thresholds LEVEMENTE (5-10% menos, não 30%)
+#      - high_vol_bear: 50% → 45% (pegar +15-25 trades bons)
+#      - medium_bear: 40% → 38%
+#      - low_vol_bear: 45% → 43% (MANTER ATIVO!)
+#   2. ✅ Aumentar position sizing LEVEMENTE (20-30% mais, não 100%)
+#      - high_vol_bear: 1.3x → 1.6x
+#      - medium_bear: 1.5x → 1.8x
+#   3. ✅ Trailing stop APENAS em high_vol_bear (regime mais forte)
+#   4. ✅ TP levemente mais agressivo nos melhores regimes
+#   5. ❌ SEM filtros de consolidação (bloquearam trades bons)
+#   6. ❌ SEM extreme volatility filter (não testado)
+#
+# 📊 PROJEÇÃO V3.5:
+#   - ROI: +75-85% (vs +69% V3)
+#   - Win Rate: 50-52% (vs 49% V3)
+#   - Sharpe: 3.5-3.8 (vs 3.26 V3)
+#   - Trades: 460-480 (vs 445 V3)
+#   - Max DD: -4.0-4.5% (similar V3)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FILTRO DE REGIME (V3.5 REFINED)
+# ----------------------------------------------------------------------------
+regime_filter:
+  enabled: true
+
+  # Regimes com ajustes conservadores
+  regimes:
+    # 🔥 MELHOR REGIME: 60.6% WR, +51.82% ROI
+    high_vol_bear:
+      enabled: true
+      min_confidence: 0.45      # ⬇️ REDUZIDO de 0.50 → 0.45 (conservador!)
+      position_multiplier: 1.6   # ⬆️ AUMENTADO de 1.3 → 1.6 (+23%)
+      stop_atr_mult: 1.4         # ⬇️ REDUZIDO de 1.5 → 1.4 (SL mais tight)
+      trailing_stop: true        # ✅ ATIVADO (apenas aqui!)
+
+    # 🟢 SEGUNDO MELHOR: 50.0% WR, +18.95% ROI
+    medium_bear:
+      enabled: true
+      min_confidence: 0.38      # ⬇️ REDUZIDO de 0.40 → 0.38 (leve)
+      position_multiplier: 1.8   # ⬆️ AUMENTADO de 1.5 → 1.8 (+20%)
+      stop_atr_mult: 1.2
+      trailing_stop: false
+
+    # ✅ POSITIVO: 43.8% WR, +8.83% ROI (MANTER ATIVO!)
+    low_vol_bear:
+      enabled: true             # ✅ MANTIDO ATIVO (contribui positivo!)
+      min_confidence: 0.43      # ⬇️ REDUZIDO de 0.45 → 0.43 (leve)
+      position_multiplier: 1.0   # = MANTIDO (regime mais fraco)
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    # 🟡 TERCEIRO: 44.6% WR, +20.44% ROI
+    high_vol_bull:
+      enabled: true
+      min_confidence: 0.58      # ⬇️ REDUZIDO de 0.60 → 0.58 (leve)
+      position_multiplier: 1.0   # ⬆️ AUMENTADO de 0.8 → 1.0 (+25%)
+      stop_atr_mult: 1.5
+      trailing_stop: false
+
+    # 🚫 BLOQUEADOS (Performance Ruim)
+    medium_bull:
+      enabled: false            # 🚫 BLOQUEADO (32.9% WR)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+    low_vol_bull:
+      enabled: false            # 🚫 BLOQUEADO (30.0% WR)
+      min_confidence: 0.99
+      position_multiplier: 0.0
+      stop_atr_mult: 1.0
+      trailing_stop: false
+
+# ----------------------------------------------------------------------------
+# FILTRO TEMPORAL (DESATIVADO)
+# ----------------------------------------------------------------------------
+temporal_filter:
+  enabled: false
+  block_weekdays:
+    enabled: false
+    blocked_days: []
+  block_hours:
+    enabled: false
+    blocked_hours_utc: []
+
+# ----------------------------------------------------------------------------
+# CONFIANÇA ADAPTATIVA (V3.5 REFINED)
+# ----------------------------------------------------------------------------
+confidence_filter:
+  enabled: true
+
+  # Multiplicadores levemente aumentados
+  tiers:
+    ultra_high:    # confidence >= 0.70
+      position_multiplier: 1.3   # ⬆️ AUMENTADO de 1.2 → 1.3 (+8%)
+      description: "Altíssima confiança"
+
+    high:          # confidence >= 0.50
+      position_multiplier: 1.1   # ⬆️ AUMENTADO de 1.0 → 1.1 (+10%)
+      description: "Alta confiança"
+
+    medium:        # confidence >= 0.30
+      position_multiplier: 0.7   # ⬆️ AUMENTADO de 0.6 → 0.7 (+17%)
+      description: "Média confiança"
+
+    low:           # confidence >= 0.10
+      position_multiplier: 0.4   # ⬆️ AUMENTADO de 0.3 → 0.4 (+33%)
+      description: "Baixa confiança"
+
+# ----------------------------------------------------------------------------
+# POSITION SIZING (V3.5 REFINED)
+# ----------------------------------------------------------------------------
+position_sizing:
+  mode: "dynamic"
+  base_size_usd: 100.0
+  max_size_usd: 650.0  # ⬆️ AUMENTADO de 600 → 650 (conservador)
+
+  # Fórmula: base_size * regime_mult * confidence_mult
+  # Exemplo V3.5:
+  #   - high_vol_bear (1.6x) + ultra_high conf (1.3x) = 208 USD (vs 180 V3)
+  #   - medium_bear (1.8x) + high conf (1.1x) = 198 USD (vs 150 V3)
+
+# ----------------------------------------------------------------------------
+# STOP LOSS DINÂMICO (V3.5 REFINED)
+# ----------------------------------------------------------------------------
+stop_loss:
+  mode: "dynamic_atr"
+  base_atr_multiplier: 1.0
+  min_atr_multiplier: 0.8
+  max_atr_multiplier: 2.2  # ⬆️ AUMENTADO de 2.0 → 2.2
+
+# ----------------------------------------------------------------------------
+# TRAILING STOP (V3.5 - APENAS high_vol_bear)
+# ----------------------------------------------------------------------------
+trailing_stop:
+  enabled: true             # ✅ ATIVADO
+
+  # Apenas para o MELHOR regime
+  regimes:
+    high_vol_bear:
+      trigger_atr_mult: 1.8   # Ativa trailing após 1.8 ATR de lucro (conservador)
+      trail_atr_mult: 0.9     # Trail a 0.9 ATR do pico (conservador)
+
+# ----------------------------------------------------------------------------
+# TAKE PROFIT (V3.5 - LEVEMENTE MAIS AGRESSIVO)
+# ----------------------------------------------------------------------------
+take_profit:
+  mode: "asymmetric"
+
+  # TPs levemente mais agressivos nos melhores regimes
+  regimes:
+    high_vol_bear:
+      tp_atr_mult: 2.3      # ⬆️ AUMENTADO de 2.2 → 2.3 (+5%)
+      risk_reward: 2.7      # ⬆️ AUMENTADO de 2.5 → 2.7 (+8%)
+
+    medium_bear:
+      tp_atr_mult: 2.1      # ⬆️ AUMENTADO de 2.0 → 2.1 (+5%)
+      risk_reward: 2.6      # ⬆️ AUMENTADO de 2.5 → 2.6 (+4%)
+
+    low_vol_bear:
+      tp_atr_mult: 1.8      # = MANTIDO
+      risk_reward: 2.0      # = MANTIDO
+
+    high_vol_bull:
+      tp_atr_mult: 1.9      # ⬆️ AUMENTADO de 1.8 → 1.9 (+6%)
+      risk_reward: 2.1      # ⬆️ AUMENTADO de 2.0 → 2.1 (+5%)
+
+    medium_bull:
+      tp_atr_mult: 1.5
+      risk_reward: 1.5
+
+    low_vol_bull:
+      tp_atr_mult: 1.2
+      risk_reward: 1.2
+
+# ----------------------------------------------------------------------------
+# FILTROS ADICIONAIS (V3.5 - DESATIVADOS)
+# ----------------------------------------------------------------------------
+advanced_filters:
+  # Extreme volatility: não testado, melhor não arriscar
+  extreme_volatility:
+    enabled: false
+    max_atr_mult: 3.0
+
+  # Consolidation: bloqueou 322 trades no V4
+  consolidation:
+    enabled: false
+    min_range_atr: 0.5
+
+# ----------------------------------------------------------------------------
+# DETECÇÃO DE REGIME
+# ----------------------------------------------------------------------------
+regime_detection:
+  volatility_window: 20
+  trend_window: 50
+  vol_quantiles:
+    low: 0.33
+    high: 0.67
+
+# ----------------------------------------------------------------------------
+# MODELO ENSEMBLE
+# ----------------------------------------------------------------------------
+ensemble:
+  models:
+    - lightgbm
+    - xgboost
+    - transformer
+
+  meta_learner:
+    type: "calibrated_logistic"
+    calibration_method: "sigmoid"
+    cv_folds: 5
+
+# ----------------------------------------------------------------------------
+# FEATURES
+# ----------------------------------------------------------------------------
+features:
+  microstructure: true
+  shap_selection: true
+  top_n_features: 60
+
+  exclude:
+    - target
+    - target_binary
+    - barrier_hit
+
+# ----------------------------------------------------------------------------
+# RISK MANAGEMENT (V3.5 - LEVEMENTE MENOS RESTRITIVO)
+# ----------------------------------------------------------------------------
+risk_management:
+  max_daily_trades: 45        # ⬆️ AUMENTADO de 40 → 45
+  max_concurrent_trades: 2    # = MANTIDO
+  max_daily_loss_pct: 3.5     # ⬆️ AUMENTADO de 3.0 → 3.5
+  max_drawdown_pct: 9.0       # ⬆️ AUMENTADO de 8.0 → 9.0
+
+  # Performance check balanceado
+  performance_check:
+    enabled: true
+    window_trades: 18         # ⬆️ AUMENTADO de 15 → 18
+    min_win_rate: 0.49        # ⬇️ REDUZIDO de 0.50 → 0.49
+    cooldown_minutes: 75      # ⬇️ REDUZIDO de 90 → 75
+
+# ----------------------------------------------------------------------------
+# WALK-FORWARD VALIDATION
+# ----------------------------------------------------------------------------
+validation:
+  walk_forward_splits: 5
+  monte_carlo_runs: 1000
+  test_confidence_levels:
+    - 0.38  # medium_bear
+    - 0.45  # high_vol_bear
+    - 0.58  # high_vol_bull
+
+# ----------------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_trades: true
+  log_regime_changes: true
+  log_blocked_trades: true
+  log_confidence_filtering: true
