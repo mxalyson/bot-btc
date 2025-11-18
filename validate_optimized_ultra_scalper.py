@@ -405,6 +405,21 @@ def validate_with_all_methods(
     feature_cols = [col for col in X.columns if col not in ['returns', 'close', 'open', 'high', 'low', 'volume']]
     X_features = X[feature_cols]
 
+    # Detectar número de features que o modelo espera
+    expected_features = None
+    if hasattr(model, 'n_features_in_'):
+        expected_features = model.n_features_in_
+        print(f"Model expects {expected_features} features")
+    elif hasattr(model, 'feature_importances_'):
+        expected_features = len(model.feature_importances_)
+        print(f"Model expects {expected_features} features (from feature_importances_)")
+
+    # Se modelo espera menos features, usar apenas as principais
+    if expected_features is not None and expected_features < len(X_features.columns):
+        print(f"⚠️  Model expects {expected_features} features but data has {len(X_features.columns)}")
+        print(f"   Using first {expected_features} features")
+        X_features = X_features.iloc[:, :expected_features]
+
     # Treinar modelo se ainda não treinado
     # Verifica se tem métodos de predição OU classes_
     needs_training = not (
@@ -427,7 +442,7 @@ def validate_with_all_methods(
             model.fit(X_features[:train_size], y[:train_size])
             print("✅ Dummy model trained")
     else:
-        print("✅ Model already trained, skipping training step")
+        print(f"✅ Model already trained, using {len(X_features.columns)} features")
 
     # Split train/test
     train_size = int(len(X_features) * 0.7)
