@@ -287,10 +287,46 @@ def build_features(data: pd.DataFrame) -> pd.DataFrame:
     # Trend strength
     df['adx'] = 50  # Simplificado
 
+    # ===========================================================================
+    # META-LEARNER FEATURES (3 features especializadas para stacking model)
+    # ===========================================================================
+    # O meta_learner espera 3 features que representam diferentes aspectos do mercado
+
+    # Feature 1: MOMENTUM SCORE (0-1) - Força direcional
+    # Combina RSI, MACD e momentum para capturar tendência
+    rsi_norm = df['rsi'] / 100
+    macd_norm = (df['macd_hist'] - df['macd_hist'].rolling(100).min()) / \
+                (df['macd_hist'].rolling(100).max() - df['macd_hist'].rolling(100).min() + 1e-10)
+    mom_norm = (df['momentum'] - df['momentum'].rolling(100).min()) / \
+               (df['momentum'].rolling(100).max() - df['momentum'].rolling(100).min() + 1e-10)
+
+    df['meta_momentum'] = (0.30 * rsi_norm + 0.40 * macd_norm + 0.30 * mom_norm).clip(0, 1).fillna(0.5)
+
+    # Feature 2: VOLUME/PRESSURE SCORE (0-1) - Força de compra/venda
+    # Combina volume ratio e posição no candle
+    vol_norm = (df['volume_ratio'].clip(0, 3) / 3)
+    candle_pos = ((df['close'] - df['low']) / (df['high'] - df['low'] + 1e-10))
+    bb_pos = ((df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'] + 1e-10))
+
+    df['meta_volume'] = (0.50 * vol_norm + 0.30 * candle_pos + 0.20 * bb_pos).clip(0, 1).fillna(0.5)
+
+    # Feature 3: VOLATILITY/RISK SCORE (0-1) - Nível de risco/volatilidade
+    # Combina ATR, BB width e volatilidade
+    atr_norm = (df['atr_pct'].clip(0, 0.05) / 0.05)
+    bb_width_norm = (df['bb_width'].clip(0, 0.1) / 0.1)
+    vol_realized = (df['returns'].rolling(20).std().clip(0, 0.05) / 0.05)
+
+    df['meta_volatility'] = (0.40 * atr_norm + 0.30 * bb_width_norm + 0.30 * vol_realized).clip(0, 1).fillna(0.5)
+
+    # Limpar valores infinitos e NaN
+    df = df.replace([np.inf, -np.inf], np.nan)
+
     # Drop NaNs
     df.dropna(inplace=True)
 
-    print(f"✅ Created {len(df.columns)} features, {len(df)} samples")
+    n_total_features = len([c for c in df.columns if c not in ['open', 'high', 'low', 'close', 'volume']])
+    print(f"✅ Created {n_total_features} features, {len(df)} samples")
+    print(f"   Including 3 meta-learner features: meta_momentum, meta_volume, meta_volatility")
 
     return df
 
@@ -465,10 +501,6 @@ def validate_with_all_methods(
 
     print("\n📊 Preparing data...")
 
-    # Features para modelo
-    feature_cols = [col for col in X.columns if col not in ['returns', 'close', 'open', 'high', 'low', 'volume']]
-    X_features = X[feature_cols]
-
     # Detectar número de features que o modelo espera
     expected_features = None
     if hasattr(model, 'n_features_in_'):
@@ -478,11 +510,26 @@ def validate_with_all_methods(
         expected_features = len(model.feature_importances_)
         print(f"Model expects {expected_features} features (from feature_importances_)")
 
-    # Se modelo espera menos features, usar apenas as principais
-    if expected_features is not None and expected_features < len(X_features.columns):
-        print(f"⚠️  Model expects {expected_features} features but data has {len(X_features.columns)}")
-        print(f"   Using first {expected_features} features")
-        X_features = X_features.iloc[:, :expected_features]
+    # Se modelo espera 3 features, usar as META FEATURES
+    if expected_features == 3:
+        print(f"✅ Using 3 meta-learner features (meta_momentum, meta_volume, meta_volatility)")
+        if all(col in X.columns for col in ['meta_momentum', 'meta_volume', 'meta_volatility']):
+            X_features = X[['meta_momentum', 'meta_volume', 'meta_volatility']]
+        else:
+            print("⚠️  Meta features not found! Creating them now...")
+            # Se por algum motivo não temos as meta features, usar as primeiras 3
+            feature_cols = [col for col in X.columns if col not in ['returns', 'close', 'open', 'high', 'low', 'volume']]
+            X_features = X[feature_cols[:3]]
+    else:
+        # Usar todas as features exceto OHLCV
+        feature_cols = [col for col in X.columns if col not in ['returns', 'close', 'open', 'high', 'low', 'volume']]
+        X_features = X[feature_cols]
+
+        # Se modelo espera menos features que as disponíveis, selecionar
+        if expected_features is not None and expected_features < len(X_features.columns):
+            print(f"⚠️  Model expects {expected_features} features but data has {len(X_features.columns)}")
+            print(f"   Using first {expected_features} features")
+            X_features = X_features.iloc[:, :expected_features]
 
     # Treinar modelo se ainda não treinado
     # Verifica se modelo está fitted (tem classes_ ou n_features_in_)
@@ -782,21 +829,25 @@ def calculate_real_returns(
     signals: np.ndarray,
     X: pd.DataFrame,
     quality_factor: float = 1.0,
-    sl_pct: float = 0.015,      # Stop Loss 1.5%
-    tp_pct: float = 0.025,      # Take Profit 2.5%
+    sl_pct: float = 0.015,      # Stop Loss base 1.5%
+    tp_pct: float = 0.025,      # Take Profit base 2.5%
     max_hold_candles: int = 12,  # Max 1 hour (12 x 5min)
     slippage_pct: float = 0.0005,  # 0.05% slippage
     commission_pct: float = 0.0006  # 0.06% commission (0.03% x 2)
 ) -> np.ndarray:
     """
-    Calcula retornos REAIS baseado em preços de entrada/saída com SL/TP
+    Calcula retornos REAIS baseado em preços de entrada/saída com SL/TP ADAPTATIVOS
+
+    SL/TP são ajustados dinamicamente baseados em ATR (volatilidade real do mercado)
+    Trades em mercado mais volátil = SL/TP mais largos
+    Trades em mercado calmo = SL/TP mais apertados
 
     Args:
         signals: Array de sinais (0/1)
-        X: DataFrame com OHLC data (deve ter colunas 'close', 'high', 'low')
+        X: DataFrame com OHLC data (deve ter colunas 'close', 'high', 'low', 'atr_pct')
         quality_factor: Multiplicador de qualidade (ajusta SL/TP)
-        sl_pct: Stop Loss percentage
-        tp_pct: Take Profit percentage
+        sl_pct: Stop Loss base percentage
+        tp_pct: Take Profit base percentage
         max_hold_candles: Máximo de candles para segurar posição
         slippage_pct: Slippage na entrada
         commission_pct: Comissão total (entrada + saída)
@@ -823,16 +874,33 @@ def calculate_real_returns(
         else:
             return np.random.normal(0.02, 0.04, n_trades) * quality_factor
 
-    # Ajustar SL/TP pelo quality_factor
-    # Quality > 1 = melhores trades = SL mais largo, TP mais próximo
-    adjusted_sl = sl_pct * (2.0 - quality_factor * 0.3)  # Menos SL para quality alto
-    adjusted_tp = tp_pct * quality_factor  # Mais TP para quality alto
-
     returns = []
 
     for trade_idx in trade_indices:
         # Entrada no close do candle de sinal
         entry_price = X.iloc[trade_idx]['close']
+
+        # SL/TP ADAPTATIVOS baseados em ATR
+        # ATR representa a volatilidade real - ajustar SL/TP proporcionalmente
+        if 'atr_pct' in X.columns:
+            atr = X.iloc[trade_idx]['atr_pct']
+
+            # ATR médio para scalping: ~0.01 a 0.03
+            # Se ATR alto (>0.02): aumentar SL/TP para evitar stop prematuro
+            # Se ATR baixo (<0.01): diminuir SL/TP para melhor R:R
+            atr_multiplier = np.clip(atr / 0.015, 0.5, 2.5)  # Normalizar em torno de 0.015 (1.5%)
+
+            # Ajustar SL/TP
+            adjusted_sl = sl_pct * atr_multiplier * (2.0 - quality_factor * 0.3)
+            adjusted_tp = tp_pct * atr_multiplier * quality_factor
+
+            # Para scalping, manter SL/TP razoáveis mesmo com ATR alto
+            adjusted_sl = np.clip(adjusted_sl, 0.005, 0.03)  # Min 0.5%, Max 3%
+            adjusted_tp = np.clip(adjusted_tp, 0.01, 0.05)   # Min 1%, Max 5%
+        else:
+            # Fallback para valores fixos
+            adjusted_sl = sl_pct * (2.0 - quality_factor * 0.3)
+            adjusted_tp = tp_pct * quality_factor
 
         # Aplicar slippage na entrada (preço pior)
         entry_price = entry_price * (1 + slippage_pct)
