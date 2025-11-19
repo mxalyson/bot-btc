@@ -410,8 +410,16 @@ def run_backtest(df, model, config):
     equity_curve = [10000.0]  # Start with $10k
     current_equity = 10000.0
 
+    # Daily trade tracking
+    daily_trades = {}
+    max_daily_trades = config['risk_management'].get('max_daily_trades', 40)
+
+    # Cooldown tracking (prevent multiple trades in same candle)
+    last_trade_idx = -10
+
     print(f"📊 Período: {df_clean['timestamp'].min()} a {df_clean['timestamp'].max()}")
     print(f"   Candles: {len(df_clean):,}")
+    print(f"   Max trades/dia: {max_daily_trades}")
     print()
     print("💹 Simulando trades...")
     print()
@@ -419,6 +427,16 @@ def run_backtest(df, model, config):
     # Loop through data
     for idx in range(len(df_clean) - 100):  # Reserve 100 bars for exit simulation
         row = df_clean.iloc[idx]
+
+        # Check daily limit
+        trade_date = row['timestamp'].date()
+        trades_today = daily_trades.get(trade_date, 0)
+        if trades_today >= max_daily_trades:
+            continue
+
+        # Cooldown (mínimo 5 candles entre trades = 1h15min)
+        if idx - last_trade_idx < 5:
+            continue
 
         # Get regime
         regime = detect_regime(row)
@@ -511,6 +529,10 @@ def run_backtest(df, model, config):
             'stop_loss': stop_loss,
             'take_profit': take_profit
         })
+
+        # Update counters
+        daily_trades[trade_date] = trades_today + 1
+        last_trade_idx = idx
 
         # Progress
         if len(trades) % 50 == 0:
