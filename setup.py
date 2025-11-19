@@ -135,11 +135,31 @@ model_path = Path('storage/models/ultra_scalper_btcusdt_365d.pkl')
 if check(model_path.exists(), f"Modelo ML '{model_path}'"):
     # Check tamanho
     size_mb = model_path.stat().st_size / (1024 * 1024)
-    if size_mb > 1:
+    if size_mb > 5:
         check(True, f"Modelo tem {size_mb:.1f} MB (tamanho OK)")
+    elif size_mb > 1:
+        warn(f"Modelo tem {size_mb:.1f} MB (suspeito - deveria ter 50-200 MB)")
+        warnings.append("Modelo parece pequeno demais. Considere re-treinar com: python train_model.py")
     else:
-        warn(f"Modelo tem apenas {size_mb:.1f} MB (pode estar corrompido)")
-        warnings.append("Modelo muito pequeno, verifique se está correto")
+        warn(f"Modelo tem apenas {size_mb:.1f} MB (MUITO PEQUENO - provavelmente corrompido)")
+        errors.append("Modelo corrompido ou incompleto")
+        print()
+        print(f"{RED}   ERRO: Modelo muito pequeno!{RESET}")
+        print()
+        print("   Modelos ML ensemble normalmente têm 50-200 MB.")
+        print(f"   Seu modelo tem apenas {size_mb:.1f} MB - provavelmente está corrompido.")
+        print()
+        print("   Solução: Re-treinar o modelo")
+        print("   Execute: python train_model.py")
+        print()
+        print("   Isso vai:")
+        print("   - Baixar 365 dias de dados BTC")
+        print("   - Calcular features técnicas")
+        print("   - Treinar ensemble (LightGBM + XGBoost + RF)")
+        print("   - Salvar modelo completo (~100-150 MB)")
+        print()
+        print("   Tempo estimado: 10-30 minutos")
+        print()
 else:
     errors.append("Modelo ML não encontrado")
     print()

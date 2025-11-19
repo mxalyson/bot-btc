@@ -64,16 +64,23 @@ O script vai procurar o modelo em:
 - `storage\models\ultra_scalper_btcusdt_365d.pkl`
 - E outras localizações comuns
 
-**Opção B: Treinar novo modelo**
+**Opção B: Treinar novo modelo (RECOMENDADO)**
 
-Se você NÃO tem o modelo:
+Se você NÃO tem o modelo OU se o modelo existente está corrompido (< 5 MB):
 
 ```bash
-# Execute um dos scripts de validação (isso treina o modelo)
-python validate_ultra_optimized_FINAL.py
+# Treinar modelo do zero (10-30 minutos)
+python train_model.py
 ```
 
-O modelo será salvo automaticamente em `storage/models/`
+O que esse script faz:
+- ✅ Baixa 365 dias de dados BTC/USDT da Bybit
+- ✅ Calcula ~40 features técnicas (RSI, MACD, ATR, etc.)
+- ✅ Treina 3 modelos: LightGBM + XGBoost + Random Forest
+- ✅ Cria ensemble com voting
+- ✅ Salva modelo completo (~100-150 MB)
+
+O modelo será salvo automaticamente em `storage/models/ultra_scalper_btcusdt_365d.pkl`
 
 ### 3. Configurar .env
 
