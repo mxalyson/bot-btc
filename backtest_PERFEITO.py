@@ -39,6 +39,88 @@ except ImportError as e:
 print()
 
 
+# ModelWrapper class (must match training file for pickle)
+class ModelWrapper:
+    """Wrapper para modelo completo (pickleable)."""
+
+    def __init__(self, models_dict, scaler, feature_columns, has_dl=False):
+        self.models = models_dict
+        self.scaler = scaler
+        self.feature_columns = feature_columns
+        self.has_dl = has_dl
+
+    def predict(self, X):
+        """Predict class."""
+        proba = self.predict_proba(X)
+        return (proba[:, 1] > 0.5).astype(int)
+
+    def predict_proba(self, X):
+        """Predict probabilities."""
+        # Ensure correct features
+        if isinstance(X, pd.DataFrame):
+            X = X[self.feature_columns].values
+
+        # Scale
+        X_scaled = self.scaler.transform(X)
+
+        # Get meta-learner predictions
+        meta_model = self.models['meta']
+
+        # Collect base predictions
+        base_preds = []
+
+        # ML models
+        for name in ['lgb', 'xgb', 'rf']:
+            if name in self.models and name != 'meta':
+                pred = self.models[name].predict_proba(X_scaled)
+                base_preds.append(pred[:, 1].reshape(-1, 1))
+
+        # CatBoost
+        if 'cb' in self.models and 'cb' != 'meta':
+            pred = self.models['cb'].predict_proba(X_scaled)
+            base_preds.append(pred[:, 1].reshape(-1, 1))
+
+        # DL models (if available)
+        if self.has_dl:
+            try:
+                import tensorflow as tf
+                from tensorflow import keras
+
+                lookback = 20
+
+                # For LSTM and CNN
+                if 'lstm' in self.models or 'cnn' in self.models:
+                    # Create sequences
+                    X_seq_list = []
+                    for i in range(len(X_scaled)):
+                        if i < lookback:
+                            # Pad beginning
+                            pad = np.zeros((lookback - i, X_scaled.shape[1]))
+                            seq = np.vstack([pad, X_scaled[:i+1]])
+                        else:
+                            seq = X_scaled[i-lookback:i]
+                        X_seq_list.append(seq)
+
+                    X_seq = np.array(X_seq_list)
+
+                    if 'lstm' in self.models:
+                        pred_lstm = self.models['lstm'].predict(X_seq, verbose=0)
+                        base_preds.append(pred_lstm[:, 1].reshape(-1, 1))
+
+                    if 'cnn' in self.models:
+                        pred_cnn = self.models['cnn'].predict(X_seq, verbose=0)
+                        base_preds.append(pred_cnn[:, 1].reshape(-1, 1))
+            except:
+                # If TensorFlow not available, skip DL models
+                pass
+
+        # Stack predictions
+        X_meta = np.hstack(base_preds)
+
+        # Meta prediction
+        return meta_model.predict_proba(X_meta)
+
+
 def get_binance_klines(symbol='BTCUSDT', interval='15m', days=180):
     """Baixa dados históricos da Binance."""
     print(f"📥 Baixando {days} dias de dados para backtest...")
