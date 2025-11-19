@@ -324,88 +324,193 @@ def load_csv_data(csv_path):
 
 
 def create_features(df):
-    """Create all features needed by the model."""
+    """Create ALL 87 extraordinary features that the model expects."""
 
-    # Order Flow
-    df['taker_buy_ratio'] = df['taker_buy_volume'] / df['volume'].replace(0, 1)
-    df['buy_sell_pressure'] = (df['taker_buy_volume'] - (df['volume'] - df['taker_buy_volume'])) / df['volume'].replace(0, 1)
-
-    # Price Action
-    df['body'] = abs(df['close'] - df['open'])
-    df['upper_wick'] = df['high'] - df[['close', 'open']].max(axis=1)
-    df['lower_wick'] = df[['close', 'open']].min(axis=1) - df['low']
-    df['range'] = df['high'] - df['low']
-    df['body_ratio'] = df['body'] / df['range'].replace(0, 1)
-    df['upper_wick_ratio'] = df['upper_wick'] / df['range'].replace(0, 1)
-    df['lower_wick_ratio'] = df['lower_wick'] / df['range'].replace(0, 1)
-
-    # Returns
+    # ========================================================================
+    # PRICE ACTION AVANÇADO
+    # ========================================================================
     df['returns'] = df['close'].pct_change()
     df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
 
-    # Moving Averages
-    for period in [7, 14, 21, 50, 100, 200]:
+    # Body/Wick analysis (importante para reversão)
+    df['body_size'] = np.abs(df['close'] - df['open']) / df['open']
+    df['upper_wick'] = (df['high'] - df[['close', 'open']].max(axis=1)) / df['open']
+    df['lower_wick'] = (df[['close', 'open']].min(axis=1) - df['low']) / df['open']
+    df['total_wick'] = df['upper_wick'] + df['lower_wick']
+    df['wick_body_ratio'] = df['total_wick'] / (df['body_size'] + 1e-8)
+
+    # Candle patterns
+    df['is_green'] = (df['close'] > df['open']).astype(int)
+    df['green_streak'] = df['is_green'].rolling(3).sum()
+    df['red_streak'] = (1 - df['is_green']).rolling(3).sum()
+
+    # ========================================================================
+    # ORDER FLOW - BUY/SELL PRESSURE
+    # ========================================================================
+    # Taker buy ratio (muito importante para scalping!)
+    df['taker_buy_ratio'] = df['taker_buy_volume'] / (df['volume'] + 1e-8)
+    df['taker_sell_ratio'] = 1 - df['taker_buy_ratio']
+
+    # Buy/Sell pressure momentum
+    df['buy_pressure_ma'] = df['taker_buy_ratio'].rolling(7).mean()
+    df['sell_pressure_ma'] = df['taker_sell_ratio'].rolling(7).mean()
+    df['pressure_delta'] = df['buy_pressure_ma'] - df['sell_pressure_ma']
+    df['pressure_momentum'] = df['pressure_delta'].diff(3)
+
+    # Order flow imbalance
+    df['order_imbalance'] = (df['taker_buy_volume'] - (df['volume'] - df['taker_buy_volume'])) / (df['volume'] + 1e-8)
+    df['imbalance_ma'] = df['order_imbalance'].rolling(5).mean()
+
+    # ========================================================================
+    # MOVING AVERAGES + CROSSOVERS
+    # ========================================================================
+    for period in [7, 14, 21, 50]:
         df[f'sma_{period}'] = df['close'].rolling(period).mean()
         df[f'ema_{period}'] = df['close'].ewm(span=period, adjust=False).mean()
-        df[f'price_to_sma_{period}'] = df['close'] / df[f'sma_{period}']
-        df[f'price_to_ema_{period}'] = df['close'] / df[f'ema_{period}']
+        df[f'price_sma_{period}_ratio'] = df['close'] / df[f'sma_{period}']
 
-    # RSI
-    for period in [7, 14, 21]:
-        delta = df['close'].diff()
-        gain = delta.where(delta > 0, 0).rolling(period).mean()
-        loss = -delta.where(delta < 0, 0).rolling(period).mean()
-        rs = gain / loss.replace(0, 1)
-        df[f'rsi_{period}'] = 100 - (100 / (1 + rs))
+    # Crossover signals
+    df['ema7_above_ema14'] = (df['ema_7'] > df['ema_14']).astype(int)
+    df['ema14_above_ema21'] = (df['ema_14'] > df['ema_21']).astype(int)
+    df['ema21_above_ema50'] = (df['ema_21'] > df['ema_50']).astype(int)
 
+    # Golden/Death cross
+    df['golden_cross'] = df['ema7_above_ema14'] & df['ema14_above_ema21']
+    df['death_cross'] = (1 - df['ema7_above_ema14']) & (1 - df['ema14_above_ema21'])
+
+    # ========================================================================
+    # VOLATILITY (ATR é KEY para SL/TP)
+    # ========================================================================
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift())
+    low_close = np.abs(df['low'] - df['close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    df['atr_14'] = true_range.rolling(14).mean()
+    df['atr_pct'] = df['atr_14'] / df['close']
+
+    # Volatility regimes
+    df['volatility_7'] = df['returns'].rolling(7).std()
+    df['volatility_21'] = df['returns'].rolling(21).std()
+    df['volatility_ratio'] = df['volatility_7'] / (df['volatility_21'] + 1e-8)
+
+    # Volatility spike
+    df['high_volatility'] = (df['volatility_ratio'] > 1.3).astype(int)
+    df['low_volatility'] = (df['volatility_ratio'] < 0.7).astype(int)
+
+    # ========================================================================
+    # RSI AVANÇADO
+    # ========================================================================
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['rsi_14'] = 100 - (100 / (1 + rs))
+
+    # RSI zones
+    df['rsi_extreme_oversold'] = (df['rsi_14'] < 25).astype(int)
+    df['rsi_extreme_overbought'] = (df['rsi_14'] > 75).astype(int)
+    df['rsi_mid'] = ((df['rsi_14'] >= 45) & (df['rsi_14'] <= 55)).astype(int)
+
+    # RSI divergence
+    df['price_slope'] = df['close'].diff(5)
+    df['rsi_slope'] = df['rsi_14'].diff(5)
+    df['bullish_divergence'] = ((df['rsi_slope'] > 0) & (df['price_slope'] < 0)).astype(int)
+    df['bearish_divergence'] = ((df['rsi_slope'] < 0) & (df['price_slope'] > 0)).astype(int)
+
+    # ========================================================================
     # MACD
+    # ========================================================================
     exp1 = df['close'].ewm(span=12, adjust=False).mean()
     exp2 = df['close'].ewm(span=26, adjust=False).mean()
     df['macd'] = exp1 - exp2
     df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-    df['macd_diff'] = df['macd'] - df['macd_signal']
+    df['macd_hist'] = df['macd'] - df['macd_signal']
 
-    # Bollinger Bands
-    for period in [20, 50]:
-        sma = df['close'].rolling(period).mean()
-        std = df['close'].rolling(period).std()
-        df[f'bb_upper_{period}'] = sma + (std * 2)
-        df[f'bb_lower_{period}'] = sma - (std * 2)
-        df[f'bb_width_{period}'] = (df[f'bb_upper_{period}'] - df[f'bb_lower_{period}']) / sma
-        df[f'bb_position_{period}'] = (df['close'] - df[f'bb_lower_{period}']) / (df[f'bb_upper_{period}'] - df[f'bb_lower_{period}']).replace(0, 1)
+    # MACD signals
+    df['macd_positive'] = (df['macd'] > 0).astype(int)
+    df['macd_hist_increasing'] = (df['macd_hist'] > df['macd_hist'].shift(1)).astype(int)
 
-    # ATR
-    high_low = df['high'] - df['low']
-    high_close = abs(df['high'] - df['close'].shift())
-    low_close = abs(df['low'] - df['close'].shift())
-    true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    df['atr_14'] = true_range.rolling(14).mean()
+    # ========================================================================
+    # BOLLINGER BANDS
+    # ========================================================================
+    df['bb_middle'] = df['close'].rolling(20).mean()
+    bb_std = df['close'].rolling(20).std()
+    df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+    df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+    df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'] + 1e-8)
 
-    # Volume features
+    # BB breakout
+    df['bb_upper_breakout'] = (df['close'] > df['bb_upper']).astype(int)
+    df['bb_lower_breakout'] = (df['close'] < df['bb_lower']).astype(int)
+
+    # ========================================================================
+    # VOLUME (confirmação crucial)
+    # ========================================================================
     df['volume_sma_20'] = df['volume'].rolling(20).mean()
-    df['volume_ratio'] = df['volume'] / df['volume_sma_20'].replace(0, 1)
+    df['volume_ratio'] = df['volume'] / (df['volume_sma_20'] + 1e-8)
+    df['high_volume'] = (df['volume_ratio'] > 1.5).astype(int)
 
-    # Momentum
-    for period in [5, 10, 20]:
-        df[f'momentum_{period}'] = df['close'] - df['close'].shift(period)
-        df[f'roc_{period}'] = ((df['close'] - df['close'].shift(period)) / df['close'].shift(period)) * 100
+    # Volume trend
+    df['volume_slope'] = df['volume'].diff(3)
+    df['volume_increasing_trend'] = (df['volume_slope'] > 0).astype(int).rolling(3).sum()
 
-    # Time-based features
+    # ========================================================================
+    # MOMENTUM
+    # ========================================================================
+    df['momentum_3'] = df['close'] / df['close'].shift(3) - 1
+    df['momentum_7'] = df['close'] / df['close'].shift(7) - 1
+    df['momentum_14'] = df['close'] / df['close'].shift(14) - 1
+
+    # Momentum acceleration
+    df['momentum_accel'] = df['momentum_7'].diff(3)
+
+    # ========================================================================
+    # PRICE POSITION
+    # ========================================================================
+    df['price_position_14'] = (df['close'] - df['low'].rolling(14).min()) / \
+                               (df['high'].rolling(14).max() - df['low'].rolling(14).min() + 1e-8)
+
+    df['price_position_50'] = (df['close'] - df['low'].rolling(50).min()) / \
+                               (df['high'].rolling(50).max() - df['low'].rolling(50).min() + 1e-8)
+
+    # ========================================================================
+    # TREND STRENGTH
+    # ========================================================================
+    df['higher_high'] = (df['high'] > df['high'].shift(1)).astype(int)
+    df['lower_low'] = (df['low'] < df['low'].shift(1)).astype(int)
+    df['hh_count'] = df['higher_high'].rolling(5).sum()
+    df['ll_count'] = df['lower_low'].rolling(5).sum()
+    df['trend_strength'] = df['hh_count'] - df['ll_count']
+
+    # ========================================================================
+    # TIME-BASED FEATURES (importante para scalping!)
+    # ========================================================================
     df['hour'] = df.index.hour
     df['day_of_week'] = df.index.dayofweek
-    df['is_weekend'] = (df.index.dayofweek >= 5).astype(int)
 
-    # Microstructure
-    df['high_low_ratio'] = df['high'] / df['low'].replace(0, 1)
-    df['close_open_ratio'] = df['close'] / df['open'].replace(0, 1)
+    # Trading session (UTC)
+    df['asian_session'] = ((df['hour'] >= 0) & (df['hour'] < 8)).astype(int)
+    df['london_session'] = ((df['hour'] >= 8) & (df['hour'] < 16)).astype(int)
+    df['us_session'] = ((df['hour'] >= 13) & (df['hour'] < 22)).astype(int)
 
-    # Lag features
-    for lag in [1, 2, 3, 5]:
-        df[f'close_lag_{lag}'] = df['close'].shift(lag)
-        df[f'volume_lag_{lag}'] = df['volume'].shift(lag)
-        df[f'returns_lag_{lag}'] = df['returns'].shift(lag)
+    # Weekend effect
+    df['weekend'] = (df['day_of_week'] >= 5).astype(int)
 
-    # Drop NaN
+    # ========================================================================
+    # MICROSTRUCTURE
+    # ========================================================================
+    # Spread proxy (high-low range)
+    df['spread_proxy'] = (df['high'] - df['low']) / df['close']
+    df['spread_ma'] = df['spread_proxy'].rolling(10).mean()
+
+    # Price impact (large candles)
+    df['large_candle'] = (df['body_size'] > df['body_size'].rolling(20).mean() * 1.5).astype(int)
+
+    # ========================================================================
+    # CLEAN
+    # ========================================================================
     df = df.dropna()
 
     return df
