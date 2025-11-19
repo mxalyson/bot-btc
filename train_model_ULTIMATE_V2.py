@@ -436,6 +436,23 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
     class_weights = compute_class_weight('balanced', classes=classes, y=y_train_balanced)
     class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
+    # If using DL, align data (remove first lookback samples from ML too)
+    lookback = 20
+    if use_dl and HAS_TF:
+        print(f"   Alinhando dados para DL (lookback={lookback})...")
+        # Remove first lookback samples from balanced data
+        X_train_balanced_aligned = X_train_balanced[lookback:]
+        y_train_balanced_aligned = y_train_balanced[lookback:]
+        X_test_aligned = X_test[lookback:]
+        y_test_aligned = y_test[lookback:]
+        print(f"   Aligned: {len(y_train_balanced_aligned)} train, {len(y_test_aligned)} test")
+    else:
+        X_train_balanced_aligned = X_train_balanced
+        y_train_balanced_aligned = y_train_balanced
+        X_test_aligned = X_test
+        y_test_aligned = y_test
+    print()
+
     print("📊 Treinando Base Models:")
     print()
 
@@ -456,8 +473,8 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
         verbose=-1,
         n_jobs=-1
     )
-    lgb_model.fit(X_train_balanced, y_train_balanced)
-    lgb_score = lgb_model.score(X_test, y_test)
+    lgb_model.fit(X_train_balanced_aligned, y_train_balanced_aligned)
+    lgb_score = lgb_model.score(X_test_aligned, y_test_aligned)
     models['lgb'] = lgb_model
     scores['lgb'] = lgb_score
     print(f"      ✅ LightGBM: {lgb_score:.2%}")
@@ -477,8 +494,8 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
         verbosity=0,
         n_jobs=-1
     )
-    xgb_model.fit(X_train_balanced, y_train_balanced)
-    xgb_score = xgb_model.score(X_test, y_test)
+    xgb_model.fit(X_train_balanced_aligned, y_train_balanced_aligned)
+    xgb_score = xgb_model.score(X_test_aligned, y_test_aligned)
     models['xgb'] = xgb_model
     scores['xgb'] = xgb_score
     print(f"      ✅ XGBoost: {xgb_score:.2%}")
@@ -496,8 +513,8 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
             verbose=0,
             thread_count=-1
         )
-        cb_model.fit(X_train_balanced, y_train_balanced)
-        cb_score = cb_model.score(X_test, y_test)
+        cb_model.fit(X_train_balanced_aligned, y_train_balanced_aligned)
+        cb_score = cb_model.score(X_test_aligned, y_test_aligned)
         models['cb'] = cb_model
         scores['cb'] = cb_score
         print(f"      ✅ CatBoost: {cb_score:.2%}")
@@ -516,8 +533,8 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
         random_state=42,
         n_jobs=-1
     )
-    rf_model.fit(X_train_balanced, y_train_balanced)
-    rf_score = rf_model.score(X_test, y_test)
+    rf_model.fit(X_train_balanced_aligned, y_train_balanced_aligned)
+    rf_score = rf_model.score(X_test_aligned, y_test_aligned)
     models['rf'] = rf_model
     scores['rf'] = rf_score
     print(f"      ✅ Random Forest: {rf_score:.2%}")
@@ -525,11 +542,13 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
     # Deep Learning models
     has_dl = False
     if use_dl and HAS_TF:
-        lookback = 20
-
-        # Create sequences
+        # Create sequences from ORIGINAL balanced data (before alignment)
+        # This will result in same size as aligned data
         X_train_seq, y_train_seq = create_sequences(X_train_balanced, y_train_balanced, lookback)
         X_test_seq, y_test_seq = create_sequences(X_test, y_test, lookback)
+
+        print(f"   Sequences: {len(X_train_seq)} train, {len(X_test_seq)} test")
+        print()
 
         # 5. LSTM
         print("   5/6 - LSTM...")
@@ -593,21 +612,21 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
     base_preds_train = []
     base_preds_test = []
 
-    # ML models
+    # ML models (use aligned data)
     for name in ['lgb', 'xgb', 'rf']:
         if name in models:
-            pred_train = models[name].predict_proba(X_train_balanced)[:, 1].reshape(-1, 1)
-            pred_test = models[name].predict_proba(X_test)[:, 1].reshape(-1, 1)
+            pred_train = models[name].predict_proba(X_train_balanced_aligned)[:, 1].reshape(-1, 1)
+            pred_test = models[name].predict_proba(X_test_aligned)[:, 1].reshape(-1, 1)
             base_preds_train.append(pred_train)
             base_preds_test.append(pred_test)
 
     if HAS_CATBOOST and 'cb' in models:
-        pred_train = models['cb'].predict_proba(X_train_balanced)[:, 1].reshape(-1, 1)
-        pred_test = models['cb'].predict_proba(X_test)[:, 1].reshape(-1, 1)
+        pred_train = models['cb'].predict_proba(X_train_balanced_aligned)[:, 1].reshape(-1, 1)
+        pred_test = models['cb'].predict_proba(X_test_aligned)[:, 1].reshape(-1, 1)
         base_preds_train.append(pred_train)
         base_preds_test.append(pred_test)
 
-    # DL models
+    # DL models (sequences already aligned)
     if has_dl:
         # LSTM
         if 'lstm' in models:
@@ -623,16 +642,25 @@ def train_models(X_train, y_train, X_test, y_test, use_dl=True):
             base_preds_train.append(pred_train)
             base_preds_test.append(pred_test)
 
-        # Adjust y for sequences
+        # Use sequence labels (already aligned with ML models)
         y_train_meta = y_train_seq
         y_test_meta = y_test_seq
     else:
-        y_train_meta = y_train_balanced
-        y_test_meta = y_test
+        # No DL, use aligned data
+        y_train_meta = y_train_balanced_aligned
+        y_test_meta = y_test_aligned
+
+    # Verify shapes match
+    print(f"   Verificando shapes...")
+    for i, pred in enumerate(base_preds_train):
+        print(f"      Model {i+1}: train={pred.shape[0]}, test={base_preds_test[i].shape[0]}")
 
     # Stack predictions
     X_meta_train = np.hstack(base_preds_train)
     X_meta_test = np.hstack(base_preds_test)
+
+    print(f"   ✅ Meta features: train={X_meta_train.shape}, test={X_meta_test.shape}")
+    print()
 
     # Scale meta features
     meta_scaler = StandardScaler()
