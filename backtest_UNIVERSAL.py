@@ -8,12 +8,18 @@ Aceita qualquer modelo .pkl e permite ajustar:
 - Capital inicial
 - Parâmetros de risco
 
+Suporta:
+- Binance (via requests, sem precisar módulo binance)
+- Bybit (se pybit instalado)
+- CSV (carrega dados locais)
+
 USO:
     python backtest_UNIVERSAL.py
     python backtest_UNIVERSAL.py --model storage/models/model_V6_365d.pkl
     python backtest_UNIVERSAL.py --long-threshold 0.50 --short-threshold 0.50
     python backtest_UNIVERSAL.py --days 180 --capital 10000
-    python backtest_UNIVERSAL.py --model my_model.pkl --long-threshold 0.45 --short-threshold 0.55 --days 90
+    python backtest_UNIVERSAL.py --exchange bybit
+    python backtest_UNIVERSAL.py --csv data/btcusdt_15m.csv
 """
 
 import sys
@@ -27,6 +33,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import requests
 
 warnings.filterwarnings('ignore')
 
@@ -127,40 +134,190 @@ def load_model(model_path):
 
 
 def fetch_binance_data(symbol, interval, days):
-    """Fetch data from Binance."""
-    from binance.client import Client
-
-    print(f"\n📥 Baixando dados do Binance...")
+    """Fetch data from Binance using requests (no binance module needed)."""
+    print(f"\n📥 Baixando dados da Binance...")
     print(f"   Symbol: {symbol}")
     print(f"   Interval: {interval}")
     print(f"   Days: {days}")
 
-    client = Client()
+    all_data = []
+    end_time = int(datetime.now().timestamp() * 1000)
+    start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
 
-    end_time = datetime.now()
-    start_time = end_time - timedelta(days=days)
+    url = "https://api.binance.com/api/v3/klines"
+    current_time = start_time
 
-    klines = client.get_historical_klines(
-        symbol,
-        interval,
-        start_time.strftime("%d %b %Y %H:%M:%S"),
-        end_time.strftime("%d %b %Y %H:%M:%S")
-    )
+    while current_time < end_time:
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'startTime': current_time,
+            'limit': 1000
+        }
 
-    df = pd.DataFrame(klines, columns=[
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            klines = response.json()
+
+            if not klines:
+                break
+
+            all_data.extend(klines)
+            current_time = klines[-1][0] + 1
+
+            if len(klines) < 1000:
+                break
+
+        except Exception as e:
+            print(f"   ⚠️  Erro: {e}")
+            break
+
+    if not all_data:
+        raise ValueError("Nenhum dado baixado!")
+
+    df = pd.DataFrame(all_data, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_volume', 'trades', 'taker_buy_volume',
-        'taker_buy_quote_volume', 'ignore'
+        'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+        'taker_buy_quote', 'ignore'
     ])
 
     # Convert types
-    for col in ['open', 'high', 'low', 'close', 'volume', 'taker_buy_volume']:
+    for col in ['open', 'high', 'low', 'close', 'volume']:
         df[col] = df[col].astype(float)
 
+    df['taker_buy_volume'] = df['taker_buy_base'].astype(float)
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
     df = df.set_index('timestamp')
 
     print(f"   ✅ {len(df)} candles baixados")
+    print(f"   Período: {df.index[0]} a {df.index[-1]}")
+
+    return df
+
+
+def fetch_bybit_data(symbol, interval, days):
+    """Fetch data from Bybit using pybit."""
+    print(f"\n📥 Baixando dados da Bybit...")
+    print(f"   Symbol: {symbol}")
+    print(f"   Interval: {interval}")
+    print(f"   Days: {days}")
+
+    try:
+        from pybit.unified_trading import HTTP
+    except ImportError:
+        raise ImportError("pybit não instalado. Execute: pip install pybit")
+
+    session = HTTP(testnet=False)
+
+    # Bybit intervals
+    interval_map = {
+        '1m': '1', '3m': '3', '5m': '5', '15m': '15',
+        '30m': '30', '1h': '60', '2h': '120', '4h': '240',
+        '6h': '360', '12h': '720', '1d': 'D', '1w': 'W'
+    }
+
+    bybit_interval = interval_map.get(interval, '15')
+
+    all_data = []
+    end_time = int(datetime.now().timestamp() * 1000)
+    start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+    current_time = start_time
+
+    while current_time < end_time:
+        try:
+            response = session.get_kline(
+                category="linear",
+                symbol=symbol,
+                interval=bybit_interval,
+                start=current_time,
+                limit=200
+            )
+
+            if response['retCode'] != 0:
+                print(f"   ⚠️  Erro Bybit: {response['retMsg']}")
+                break
+
+            klines = response['result']['list']
+
+            if not klines:
+                break
+
+            all_data.extend(klines)
+
+            # Bybit returns newest first, so we need oldest
+            current_time = int(klines[-1][0]) + 1
+
+            if len(klines) < 200:
+                break
+
+        except Exception as e:
+            print(f"   ⚠️  Erro: {e}")
+            break
+
+    if not all_data:
+        raise ValueError("Nenhum dado baixado!")
+
+    # Bybit format: [timestamp, open, high, low, close, volume, turnover]
+    df = pd.DataFrame(all_data, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'
+    ])
+
+    # Convert types
+    for col in ['open', 'high', 'low', 'close', 'volume']:
+        df[col] = df[col].astype(float)
+
+    df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms')
+    df = df.set_index('timestamp')
+    df = df.sort_index()  # Bybit returns newest first
+
+    # Calculate taker_buy_volume (estimate as 50% for Bybit)
+    df['taker_buy_volume'] = df['volume'] * 0.5
+
+    print(f"   ✅ {len(df)} candles baixados")
+    print(f"   Período: {df.index[0]} a {df.index[-1]}")
+
+    return df
+
+
+def load_csv_data(csv_path):
+    """Load data from CSV file."""
+    print(f"\n📂 Carregando dados do CSV: {csv_path}")
+
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"CSV não encontrado: {csv_path}")
+
+    df = pd.read_csv(csv_path)
+
+    # Try to parse timestamp column
+    timestamp_cols = ['timestamp', 'time', 'date', 'datetime']
+    timestamp_col = None
+
+    for col in timestamp_cols:
+        if col in df.columns:
+            timestamp_col = col
+            break
+
+    if timestamp_col:
+        df[timestamp_col] = pd.to_datetime(df[timestamp_col])
+        df = df.set_index(timestamp_col)
+    elif 'Unnamed: 0' in df.columns:
+        df = df.rename(columns={'Unnamed: 0': 'timestamp'})
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df = df.set_index('timestamp')
+
+    # Ensure required columns exist
+    required_cols = ['open', 'high', 'low', 'close', 'volume']
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"Coluna '{col}' não encontrada no CSV!")
+
+    # Add taker_buy_volume if not present (estimate as 50%)
+    if 'taker_buy_volume' not in df.columns:
+        df['taker_buy_volume'] = df['volume'] * 0.5
+        print("   ℹ️  taker_buy_volume não encontrado, usando 50% do volume")
+
+    print(f"   ✅ {len(df)} candles carregados")
     print(f"   Período: {df.index[0]} a {df.index[-1]}")
 
     return df
@@ -488,7 +645,8 @@ Exemplos:
   %(prog)s
   %(prog)s --model storage/models/model_V6_365d.pkl
   %(prog)s --long-threshold 0.50 --short-threshold 0.50
-  %(prog)s --days 180 --capital 10000
+  %(prog)s --exchange bybit
+  %(prog)s --csv data/btcusdt_15m.csv
   %(prog)s --model my_model.pkl --long-threshold 0.45 --short-threshold 0.55 --days 90
         """
     )
@@ -502,6 +660,12 @@ Exemplos:
 
     parser.add_argument('--short-threshold', type=float, default=None,
                         help='Threshold para short (0.0-1.0). Se não especificado, usa o do modelo.')
+
+    parser.add_argument('--exchange', type=str, default='binance', choices=['binance', 'bybit'],
+                        help='Exchange para baixar dados (default: binance)')
+
+    parser.add_argument('--csv', type=str, default=None,
+                        help='Carregar dados de CSV ao invés de baixar da exchange')
 
     parser.add_argument('--days', type=int, default=52,
                         help='Dias de dados para backtest (default: 52 = ~2 meses)')
@@ -543,7 +707,14 @@ Exemplos:
         wrapper.short_threshold = args.short_threshold
 
     # Fetch data
-    df = fetch_binance_data(args.symbol, args.interval, args.days)
+    if args.csv:
+        df = load_csv_data(args.csv)
+    elif args.exchange == 'binance':
+        df = fetch_binance_data(args.symbol, args.interval, args.days)
+    elif args.exchange == 'bybit':
+        df = fetch_bybit_data(args.symbol, args.interval, args.days)
+    else:
+        raise ValueError(f"Exchange não suportada: {args.exchange}")
 
     # Create features
     print(f"\n🔧 Criando features...")
