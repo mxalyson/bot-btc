@@ -472,6 +472,19 @@ def run_backtest(df, wrapper, config):
         print(f"   Longs preditos: {(predictions == 1).sum()}")
         print(f"   Shorts preditos: {(predictions == 0).sum()}")
 
+    # Check prediction balance
+    long_pct = (predictions == 1).sum() / len(predictions) * 100
+    short_pct = (predictions == 0).sum() / len(predictions) * 100
+    
+    print(f"   Long %: {long_pct:.1f}%")
+    print(f"   Short %: {short_pct:.1f}%")
+    
+    if long_pct > 80 or short_pct > 80:
+        print(f"\n   ⚠️  AVISO: Predições muito desbalanceadas!")
+        print(f"   Threshold pode estar inadequado.")
+        print(f"   Long threshold atual: {wrapper.long_threshold}")
+        print()
+
     except Exception as e:
         print(f"   ❌ Erro ao gerar predições: {e}")
         import traceback
@@ -480,7 +493,7 @@ def run_backtest(df, wrapper, config):
 
     # Simulate trades
     trades = []
-    balance = config['risk_management']['initial_capital']
+    balance = config['risk_management'].get('initial_capital', 10000)  # Default $10k
     capital_per_trade = balance * (config['risk_management']['risk_per_trade'] / 100)
 
     for i in range(len(df) - 1):
