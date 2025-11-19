@@ -288,7 +288,7 @@ def load_config(config_path):
     """Carrega configuração YAML."""
     print(f"⚙️  Carregando config: {config_path}")
 
-    with open(config_path, 'r') as f:
+    with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
     print("✅ Config carregado!")
