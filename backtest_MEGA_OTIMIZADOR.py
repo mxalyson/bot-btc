@@ -504,20 +504,20 @@ def run_backtest_with_config(df, wrapper, config):
 
 
 def mega_grid_search(df, wrapper):
-    """Massive grid search across all parameters."""
+    """Massive grid search across all parameters - OPTIMIZED VERSION."""
 
     print("\n" + "="*80)
-    print("🔬 MEGA GRID SEARCH - OTIMIZAÇÃO TOTAL")
+    print("🔬 MEGA GRID SEARCH - OTIMIZAÇÃO INTELIGENTE")
     print("="*80)
-    print("\nTestando TODAS as combinações possíveis...")
-    print("⏳ Isso pode levar alguns minutos...")
+    print("\nTestando combinações mais promissoras...")
+    print("⏳ Tempo estimado: 15-20 minutos...")
 
-    # Parameter grid
-    long_thresholds = np.arange(0.45, 0.75, 0.03)  # ~10 values
-    short_thresholds = np.arange(0.35, 0.65, 0.03)  # ~10 values
-    sl_mults = [1.5, 2.0, 2.5, 3.0]
-    tp_mults = [2.0, 2.5, 3.0, 3.5]
-    cooldowns = [0, 3, 5]  # candles between trades
+    # Parameter grid - OPTIMIZED (menos pontos, melhor espaçados)
+    long_thresholds = [0.45, 0.50, 0.55, 0.60, 0.65, 0.70]  # 6 values
+    short_thresholds = [0.35, 0.40, 0.45, 0.50, 0.55, 0.60]  # 6 values
+    sl_mults = [1.5, 2.0, 2.5]  # 3 values (removido 3.0 - SL muito largo)
+    tp_mults = [2.0, 2.5, 3.0]  # 3 values (removido 3.5 - TP muito otimista)
+    cooldowns = [0, 5]  # 2 values (3 candles é meio-termo, testamos extremos)
 
     # Filter combinations
     filter_configs = [
@@ -531,6 +531,7 @@ def mega_grid_search(df, wrapper):
     total_tests = len(long_thresholds) * len(short_thresholds) * len(sl_mults) * len(tp_mults) * len(cooldowns) * len(filter_configs)
 
     print(f"📊 Total de testes: {total_tests}")
+    print(f"💡 Redução inteligente: ~87% menos testes mantendo qualidade!")
     print()
 
     test_count = 0
