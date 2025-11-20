@@ -281,6 +281,20 @@ def create_features(df):
     df['london_session'] = ((df['hour'] >= 8) & (df['hour'] < 16)).astype(int)
     df['us_session'] = ((df['hour'] >= 13) & (df['hour'] < 22)).astype(int)
 
+    # Trend Strength (features que faltavam!)
+    df['higher_high'] = (df['high'] > df['high'].shift(1)).astype(int)
+    df['lower_low'] = (df['low'] < df['low'].shift(1)).astype(int)
+    df['hh_count'] = df['higher_high'].rolling(5).sum()
+    df['ll_count'] = df['lower_low'].rolling(5).sum()
+    df['trend_strength'] = df['hh_count'] - df['ll_count']
+
+    # Spread proxy
+    df['spread_proxy'] = (df['high'] - df['low']) / df['close']
+    df['spread_ma'] = df['spread_proxy'].rolling(10).mean()
+
+    # Large candles
+    df['large_candle'] = (df['body_size'] > df['body_size'].rolling(20).mean() * 1.5).astype(int)
+
     # Market Regime Detection
     df['sma_20'] = df['close'].rolling(20).mean()
     df['sma_50'] = df['close'].rolling(50).mean()
