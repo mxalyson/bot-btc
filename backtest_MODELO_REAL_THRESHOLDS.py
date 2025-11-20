@@ -43,6 +43,58 @@ class ModelWrapper:
         self.long_threshold = long_threshold
         self.short_threshold = short_threshold
         self.lookback = lookback
+        self.version = getattr(self, 'version', 'MODELO_FINAL_COMPLETO')
+        self.timestamp = getattr(self, 'timestamp', datetime.now().isoformat())
+
+    def predict_proba(self, X):
+        """Weighted ensemble prediction."""
+        if isinstance(X, pd.DataFrame):
+            X = X[self.feature_columns].values
+
+        X_scaled = self.scaler.transform(X)
+
+        # Get weighted predictions from all models
+        all_probs = []
+        for model, weight, name in zip(self.models_list, self.model_weights, self.model_names):
+
+            if name in ['LSTM', 'CNN'] and self.has_dl:
+                # DL needs sequences
+                X_seq = self._prepare_sequences(X_scaled)
+                pred_full = np.zeros(len(X_scaled))
+                pred_full[self.lookback:] = model.predict(X_seq, verbose=0).flatten()
+                pred_full[:self.lookback] = pred_full[self.lookback]  # Fill inicio
+                pred = pred_full
+            else:
+                pred = model.predict_proba(X_scaled)[:, 1]
+
+            all_probs.append(pred * weight)
+
+        # Weighted average
+        final_proba = np.sum(all_probs, axis=0)
+
+        # Return as 2D array
+        proba_class_0 = 1 - final_proba
+        proba_class_1 = final_proba
+
+        return np.column_stack([proba_class_0, proba_class_1])
+
+    def predict(self, X):
+        """Predição binária com threshold ajustado."""
+        proba = self.predict_proba(X)[:, 1]
+
+        predictions = np.zeros(len(proba))
+
+        # Lower threshold for longs (easier to enter)
+        predictions[proba >= self.long_threshold] = 1
+
+        return predictions.astype(int)
+
+    def _prepare_sequences(self, X):
+        """Prepara sequences para LSTM/CNN."""
+        X_seq = []
+        for i in range(self.lookback, len(X)):
+            X_seq.append(X[i-self.lookback:i])
+        return np.array(X_seq)
 
 
 class CustomUnpickler(pickle.Unpickler):
