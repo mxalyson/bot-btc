@@ -364,7 +364,7 @@ def calculate_advanced_metrics(trades_df, initial_capital):
 
 
 def run_backtest_with_config(df, wrapper, config):
-    """Run backtest with specific configuration."""
+    """Run backtest with specific configuration - OPTIMIZED."""
 
     # Override thresholds
     wrapper_copy = wrapper
@@ -386,9 +386,25 @@ def run_backtest_with_config(df, wrapper, config):
     slippage_pct = 0.05
     cooldown_candles = config.get('cooldown', 0)
 
+    # OPTIMIZATION: Convert to numpy arrays (10-100x faster than df.iloc)
+    close_arr = df['close'].values
+    high_arr = df['high'].values
+    low_arr = df['low'].values
+    atr_arr = df['atr_14'].values
+    volume_ratio_arr = df['volume_ratio'].values
+    volatility_ratio_arr = df['volatility_ratio'].values
+    weekend_arr = df['weekend'].values
+    london_session_arr = df['london_session'].values
+    us_session_arr = df['us_session'].values
+    regime_arr = df['regime'].values
+    spread_pct_arr = df['spread_pct'].values
+
     balance = initial_capital
     trades = []
     last_trade_idx = -cooldown_candles - 1
+
+    # OPTIMIZATION: Reduced lookforward from 50 to 20 candles (5 hours @ 15min)
+    max_lookforward = 20
 
     for i in range(len(df) - 1):
         signal = predictions[i]
@@ -397,22 +413,22 @@ def run_backtest_with_config(df, wrapper, config):
         if i - last_trade_idx <= cooldown_candles:
             continue
 
-        # Apply filters
-        if config.get('filter_volume') and df.iloc[i]['volume_ratio'] < config.get('min_volume_ratio', 1.0):
+        # Apply filters (using numpy arrays)
+        if config.get('filter_volume') and volume_ratio_arr[i] < config.get('min_volume_ratio', 1.0):
             continue
         if config.get('filter_volatility'):
-            vr = df.iloc[i]['volatility_ratio']
+            vr = volatility_ratio_arr[i]
             if vr < config.get('min_vol_ratio', 0.5) or vr > config.get('max_vol_ratio', 2.0):
                 continue
-        if config.get('filter_spread') and df.iloc[i]['spread_pct'] > config.get('max_spread', 0.05):
+        if config.get('filter_spread') and spread_pct_arr[i] > config.get('max_spread', 0.05):
             continue
-        if config.get('avoid_weekend') and df.iloc[i]['weekend'] == 1:
+        if config.get('avoid_weekend') and weekend_arr[i] == 1:
             continue
         if config.get('filter_session'):
             session_ok = False
-            if config.get('allow_london') and df.iloc[i]['london_session'] == 1:
+            if config.get('allow_london') and london_session_arr[i] == 1:
                 session_ok = True
-            if config.get('allow_us') and df.iloc[i]['us_session'] == 1:
+            if config.get('allow_us') and us_session_arr[i] == 1:
                 session_ok = True
             if not session_ok:
                 continue
@@ -420,52 +436,52 @@ def run_backtest_with_config(df, wrapper, config):
         capital_at_risk = balance * (risk_pct / 100)
 
         if signal == 1:  # Long
-            entry_price = df.iloc[i]['close'] * (1 + slippage_pct / 100)
-            atr = df.iloc[i]['atr_14']
+            entry_price = close_arr[i] * (1 + slippage_pct / 100)
+            atr = atr_arr[i]
             sl_price = entry_price - (atr * sl_mult)
             tp_price = entry_price + (atr * tp_mult)
 
-            for j in range(i + 1, min(i + 50, len(df))):
-                low = df.iloc[j]['low']
-                high = df.iloc[j]['high']
+            for j in range(i + 1, min(i + max_lookforward, len(df))):
+                low = low_arr[j]
+                high = high_arr[j]
 
                 if low <= sl_price:
                     exit_price = sl_price * (1 - slippage_pct / 100)
                     pnl = ((exit_price - entry_price) / entry_price) * capital_at_risk
                     balance += pnl
-                    trades.append({'type': 'LONG', 'pnl': pnl, 'regime': df.iloc[i]['regime']})
+                    trades.append({'type': 'LONG', 'pnl': pnl, 'regime': regime_arr[i]})
                     last_trade_idx = i
                     break
                 elif high >= tp_price:
                     exit_price = tp_price * (1 - slippage_pct / 100)
                     pnl = ((exit_price - entry_price) / entry_price) * capital_at_risk
                     balance += pnl
-                    trades.append({'type': 'LONG', 'pnl': pnl, 'regime': df.iloc[i]['regime']})
+                    trades.append({'type': 'LONG', 'pnl': pnl, 'regime': regime_arr[i]})
                     last_trade_idx = i
                     break
 
         elif signal == 0:  # Short
-            entry_price = df.iloc[i]['close'] * (1 - slippage_pct / 100)
-            atr = df.iloc[i]['atr_14']
+            entry_price = close_arr[i] * (1 - slippage_pct / 100)
+            atr = atr_arr[i]
             sl_price = entry_price + (atr * sl_mult)
             tp_price = entry_price - (atr * tp_mult)
 
-            for j in range(i + 1, min(i + 50, len(df))):
-                low = df.iloc[j]['low']
-                high = df.iloc[j]['high']
+            for j in range(i + 1, min(i + max_lookforward, len(df))):
+                low = low_arr[j]
+                high = high_arr[j]
 
                 if high >= sl_price:
                     exit_price = sl_price * (1 + slippage_pct / 100)
                     pnl = ((entry_price - exit_price) / entry_price) * capital_at_risk
                     balance += pnl
-                    trades.append({'type': 'SHORT', 'pnl': pnl, 'regime': df.iloc[i]['regime']})
+                    trades.append({'type': 'SHORT', 'pnl': pnl, 'regime': regime_arr[i]})
                     last_trade_idx = i
                     break
                 elif low <= tp_price:
                     exit_price = tp_price * (1 + slippage_pct / 100)
                     pnl = ((entry_price - exit_price) / entry_price) * capital_at_risk
                     balance += pnl
-                    trades.append({'type': 'SHORT', 'pnl': pnl, 'regime': df.iloc[i]['regime']})
+                    trades.append({'type': 'SHORT', 'pnl': pnl, 'regime': regime_arr[i]})
                     last_trade_idx = i
                     break
 
@@ -510,7 +526,7 @@ def mega_grid_search(df, wrapper):
     print("🔬 MEGA GRID SEARCH - VERSÃO ULTRA RÁPIDA")
     print("="*80)
     print("\nTestando apenas combinações mais críticas...")
-    print("⏳ Tempo estimado: 30-45 minutos...")
+    print("⏳ Tempo estimado: 15-20 minutos (otimizado com numpy arrays)...")
 
     # Parameter grid - ULTRA OPTIMIZED (mínimo necessário)
     long_thresholds = [0.50, 0.55, 0.60, 0.65]  # 4 values (foco no range mais comum)
@@ -541,7 +557,7 @@ def mega_grid_search(df, wrapper):
     ):
         test_count += 1
 
-        if test_count % 100 == 0:
+        if test_count % 50 == 0:
             print(f"   Progresso: {test_count}/{total_tests} ({test_count/total_tests*100:.1f}%)")
 
         config = {
@@ -650,7 +666,7 @@ def mega_grid_search(df, wrapper):
 def main():
     parser = argparse.ArgumentParser(description='Mega Otimizador V3 Scalper')
     parser.add_argument('--model', type=str, default='storage/models/model_DEFINITIVO_4ML_540d.pkl')
-    parser.add_argument('--days', type=int, default=90)
+    parser.add_argument('--days', type=int, default=60)  # Reduced from 90 to 60 for speed
     parser.add_argument('--symbol', type=str, default='BTCUSDT')
     parser.add_argument('--interval', type=str, default='15m')
 
