@@ -108,14 +108,37 @@ class ModelWrapper:
 
 
 def load_model(model_path):
-    """Load model from pickle file."""
+    """Load model from pickle file with robust error handling."""
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Modelo não encontrado: {model_path}")
 
-    with open(model_path, 'rb') as f:
-        wrapper = pickle.load(f)
+    print(f"📦 Carregando modelo: {model_path}")
 
-    return wrapper
+    # First try: normal pickle load
+    try:
+        with open(model_path, 'rb') as f:
+            wrapper = pickle.load(f)
+        print(f"   ✅ Modelo carregado!")
+        return wrapper
+    except AttributeError as e:
+        print(f"   ⚠️  Erro ao carregar pickle: {e}")
+        print(f"   🔄 Tentando modo compatibilidade...")
+
+        # Second try: load with custom unpickler that uses our ModelWrapper
+        import io
+
+        class CustomUnpickler(pickle.Unpickler):
+            def find_class(self, module, name):
+                # If ModelWrapper is not found in original module, use our local one
+                if name == 'ModelWrapper':
+                    return ModelWrapper
+                return super().find_class(module, name)
+
+        with open(model_path, 'rb') as f:
+            wrapper = CustomUnpickler(f).load()
+
+        print(f"   ✅ Modelo carregado com compatibilidade!")
+        return wrapper
 
 
 def fetch_binance_data(symbol, interval, days):
