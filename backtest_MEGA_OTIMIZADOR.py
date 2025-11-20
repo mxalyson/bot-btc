@@ -499,7 +499,7 @@ def run_backtest_with_config(df, wrapper, config):
         'final_balance': balance,
         **advanced,
         'trades_df': trades_df,
-        'score': roi_net * (win_rate/100) * (1 + advanced.get('profit_factor', 0)) - max_drawdown_pct
+        'score': roi_net * (win_rate/100) * (1 + advanced.get('profit_factor', 0)) - advanced.get('max_drawdown_pct', 0)
     }
 
 
