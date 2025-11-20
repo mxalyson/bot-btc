@@ -674,6 +674,24 @@ def main():
     df = create_features(df)
     print(f"   ✅ {len([c for c in df.columns if c not in ['open', 'high', 'low', 'close', 'volume']])} features criadas\n")
 
+    # DEBUG: Check if required features exist
+    print("🔍 Verificando compatibilidade de features...")
+    required_features = wrapper.feature_columns
+    missing_features = [f for f in required_features if f not in df.columns]
+
+    if missing_features:
+        print(f"   ❌ ERRO: {len(missing_features)} features faltando!")
+        print(f"   Features necessárias mas não encontradas:")
+        for feat in missing_features[:10]:  # Show first 10
+            print(f"      - {feat}")
+        if len(missing_features) > 10:
+            print(f"      ... e mais {len(missing_features) - 10}")
+        print(f"\n   💡 SOLUÇÃO: Execute 'git pull' para atualizar o código!")
+        print(f"   💡 Ou verifique se create_features() está completa.\n")
+        sys.exit(1)
+    else:
+        print(f"   ✅ Todas as {len(required_features)} features necessárias estão presentes!\n")
+
     # Run mega grid search
     results = mega_grid_search(df, wrapper)
 
