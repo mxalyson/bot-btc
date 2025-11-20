@@ -38,6 +38,75 @@ import requests
 warnings.filterwarnings('ignore')
 
 
+class ModelWrapper:
+    """Wrapper compatível com modelo salvo."""
+
+    def __init__(self, models_list, model_weights, model_names, scaler,
+                 feature_columns, has_dl=False, long_threshold=0.50,
+                 short_threshold=0.50, lookback=10):
+        self.models_list = models_list
+        self.model_weights = model_weights
+        self.model_names = model_names
+        self.scaler = scaler
+        self.feature_columns = feature_columns
+        self.has_dl = has_dl
+        self.long_threshold = long_threshold
+        self.short_threshold = short_threshold
+        self.lookback = lookback
+
+    def predict(self, X):
+        """Predict with weighted ensemble."""
+        X_scaled = self.scaler.transform(X[self.feature_columns])
+
+        predictions = []
+        for model, weight in zip(self.models_list, self.model_weights):
+            try:
+                if hasattr(model, 'predict_proba'):
+                    proba = model.predict_proba(X_scaled)[:, 1]
+                else:
+                    proba = model.predict(X_scaled).flatten()
+                predictions.append(proba * weight)
+            except:
+                continue
+
+        if not predictions:
+            raise ValueError("All models failed!")
+
+        proba = np.sum(predictions, axis=0)
+
+        final_predictions = np.zeros(len(proba), dtype=int)
+        final_predictions[proba >= self.long_threshold] = 1
+        final_predictions[proba <= (1 - self.short_threshold)] = 0
+
+        return final_predictions
+
+    def predict_proba(self, X):
+        """Get probability scores."""
+        X_scaled = self.scaler.transform(X[self.feature_columns])
+
+        predictions = []
+        for model, weight in zip(self.models_list, self.model_weights):
+            try:
+                if hasattr(model, 'predict_proba'):
+                    proba = model.predict_proba(X_scaled)[:, 1]
+                else:
+                    proba = model.predict(X_scaled).flatten()
+                predictions.append(proba * weight)
+            except:
+                continue
+
+        if not predictions:
+            raise ValueError("All models failed!")
+
+        proba = np.sum(predictions, axis=0)
+
+        result = np.zeros((len(proba), 2))
+        result[:, 0] = 1 - proba
+        result[:, 1] = proba
+
+        return result
+
+
 def load_model(model_path):
     """Load model from pickle file."""
     if not os.path.exists(model_path):
