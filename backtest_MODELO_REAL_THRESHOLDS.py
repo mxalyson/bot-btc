@@ -105,17 +105,30 @@ class CustomUnpickler(pickle.Unpickler):
 
 
 def load_model(model_path):
-    """Carrega modelo pickle."""
+    """Carrega modelo pickle e reconstrói com classe nova."""
     print(f"📦 Carregando: {model_path}")
     with open(model_path, 'rb') as f:
-        wrapper = CustomUnpickler(f).load()
+        old_wrapper = CustomUnpickler(f).load()
+
+    # Reconstruir wrapper com a classe nova (que tem os métodos)
+    new_wrapper = ModelWrapper(
+        models_list=old_wrapper.models_list,
+        model_weights=old_wrapper.model_weights,
+        model_names=old_wrapper.model_names,
+        scaler=old_wrapper.scaler,
+        feature_columns=old_wrapper.feature_columns,
+        has_dl=old_wrapper.has_dl,
+        long_threshold=old_wrapper.long_threshold,
+        short_threshold=old_wrapper.short_threshold,
+        lookback=old_wrapper.lookback
+    )
 
     print(f"   ✅ Modelo carregado!")
-    print(f"   Features: {len(wrapper.feature_columns)}")
-    print(f"   Long threshold: {wrapper.long_threshold}")
-    print(f"   Short threshold: {wrapper.short_threshold}")
-    print(f"   Models: {wrapper.model_names}")
-    return wrapper
+    print(f"   Features: {len(new_wrapper.feature_columns)}")
+    print(f"   Long threshold: {new_wrapper.long_threshold}")
+    print(f"   Short threshold: {new_wrapper.short_threshold}")
+    print(f"   Models: {new_wrapper.model_names}")
+    return new_wrapper
 
 
 def get_binance_data(days=90):
